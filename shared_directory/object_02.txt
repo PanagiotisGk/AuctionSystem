@@ -1,0 +1,4 @@
+object_id=Object_02
+description=Logitech Mechanical Keyboard
+start_bid=40.0
+auction_duration=45

@@ -4,7 +4,7 @@ import java.net.ServerSocket;
 import java.net.Socket;
 
 public class AuctionServer {
-    public static final int SERVER_PORT = 5000;
+    public static final int SERVER_PORT = 8080;
 
     public static void main(String[] args) {
         ServerState serverState = new ServerState();

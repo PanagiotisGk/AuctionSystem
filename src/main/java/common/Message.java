@@ -1,5 +1,6 @@
 package common;
 
+
 import java.io.Serializable;
 import model.AuctionItem;
 import java.util.List;
@@ -14,6 +15,8 @@ public class Message implements Serializable {
     private Boolean success;
     private String message;
     private List<AuctionItem> items;
+    private String objectId;
+    private String description;
 
     public Message() {
     }
@@ -92,5 +95,22 @@ public class Message implements Serializable {
 
     public void setItems(List<AuctionItem> items) {
         this.items = items;
+    }
+
+
+    public String getObjectId() {
+        return objectId;
+    }
+
+    public void setObjectId(String objectId) {
+        this.objectId = objectId;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
     }
 }

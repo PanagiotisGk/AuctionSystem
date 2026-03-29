@@ -11,7 +11,7 @@ import java.util.Scanner;
 
 public class PeerNode {
     private static final String SERVER_HOST = "127.0.0.1";
-    private static final int SERVER_PORT = 5000;
+    private static final int SERVER_PORT = 8080;
 
     public static void main(String[] args) {
         String username = "peer1";
@@ -79,12 +79,13 @@ public class PeerNode {
             Message requestAuctionResponse = (Message) in.readObject();
             System.out.println("REQUEST_AUCTION -> " + requestAuctionResponse.getMessage());
             System.out.println("Peer is now active.");
-            System.out.println("Type 'logout' to logout and exit.");
+            System.out.println("Type 'current' to get current auction or 'logout' to exit.");
 
             while (true) {
                 String input = scanner.nextLine();
+                String command = input.trim();
 
-                if ("logout".equalsIgnoreCase(input.trim())) {
+                if ("logout".equalsIgnoreCase(command)) {
                     Message logoutMsg = new Message(MessageType.LOGOUT);
                     logoutMsg.setTokenId(peerState.getTokenId());
                     out.writeObject(logoutMsg);
@@ -98,8 +99,26 @@ public class PeerNode {
                     }
 
                     break;
+
+                } else if ("current".equalsIgnoreCase(command)) {
+                    Message currentAuctionMsg = new Message(MessageType.GET_CURRENT_AUCTION);
+                    currentAuctionMsg.setTokenId(peerState.getTokenId());
+
+                    out.writeObject(currentAuctionMsg);
+                    out.flush();
+
+                    Message currentAuctionResponse = (Message) in.readObject();
+
+                    if (Boolean.TRUE.equals(currentAuctionResponse.getSuccess())) {
+                        System.out.println("CURRENT AUCTION:");
+                        System.out.println("Object ID -> " + currentAuctionResponse.getObjectId());
+                        System.out.println("Description -> " + currentAuctionResponse.getDescription());
+                    } else {
+                        System.out.println("GET_CURRENT_AUCTION -> " + currentAuctionResponse.getMessage());
+                    }
+
                 } else {
-                    System.out.println("Unknown command. Type 'logout' to exit.");
+                    System.out.println("Unknown command. Type 'current' to see active auction or 'logout' to terminate session.");
                 }
             }
 

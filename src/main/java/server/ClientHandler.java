@@ -39,6 +39,8 @@ public class ClientHandler implements Runnable {
         }
     }
 
+
+
     private Message handleRequest(Message request) {
         if (request.getType() == MessageType.REGISTER) {
             return handleRegister(request);
@@ -48,6 +50,9 @@ public class ClientHandler implements Runnable {
             return handleLogout(request);
         }else if (request.getType() == MessageType.REQUEST_AUCTION) {
         return handleRequestAuction(request);
+
+        } else if (request.getType() == MessageType.GET_CURRENT_AUCTION) {
+            return handleGetCurrentAuction(request);
         }
         else {
             Message response = new Message(MessageType.ERROR);
@@ -122,4 +127,26 @@ public class ClientHandler implements Runnable {
 
         return response;
     }
+
+
+
+    private Message handleGetCurrentAuction(Message request) {
+        Message response = new Message(MessageType.GET_CURRENT_AUCTION_RESPONSE);
+
+        AuctionState currentAuction = serverState.getCurrentAuction();
+
+        if (currentAuction == null || !currentAuction.isActive()) {
+            response.setSuccess(false);
+            response.setMessage("No active auction");
+            return response;
+        }
+
+        response.setSuccess(true);
+        response.setMessage("Current auction fetched successfully");
+        response.setObjectId(currentAuction.getItem().getObjectId());
+        response.setDescription(currentAuction.getItem().getDescription());
+
+        return response;
+    }
+
 }

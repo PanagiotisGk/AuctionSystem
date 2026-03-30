@@ -1,4 +1,4 @@
 object_id=Object_01
 description=Samsung Galaxy S21
 start_bid=150.0
-auction_duration=30
+auction_duration=120

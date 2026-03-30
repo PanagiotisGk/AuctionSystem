@@ -143,4 +143,65 @@ public class ServerState {
         }
         return currentAuction;
     }
+
+
+    public static class BidResult {
+        private final boolean success;
+        private final String message;
+
+        public BidResult(boolean success, String message) {
+            this.success = success;
+            this.message = message;
+        }
+
+        public boolean isSuccess() {
+            return success;
+        }
+
+        public String getMessage() {
+            return message;
+        }
+    }
+
+
+    public synchronized BidResult placeBid(String bidderTokenId, double bidAmount) {
+        SessionInfo bidderSession = activeSessionsByToken.get(bidderTokenId);
+
+        if (bidderSession == null) {
+            return new BidResult(false, "Invalid token");
+        }
+
+        AuctionState auction = getCurrentAuction();
+
+        if (auction == null || !auction.isActive()) {
+            return new BidResult(false, "No active auction");
+        }
+
+        if (auction.getRemainingSeconds() <= 0) {
+            auction.setActive(false);
+            startNextAuctionIfNeeded();
+            return new BidResult(false, "Sorry, auction has already ended");
+        }
+
+        String sellerTokenId = auction.getQueueEntry().getSellerTokenId();
+        if (sellerTokenId.equals(bidderTokenId)) {
+            return new BidResult(false, "Seller cannot bid on his/hers own auction");
+        }
+
+        if (bidAmount <= auction.getCurrentHighestBid()) {
+            return new BidResult(false, "Bid must be greater than current highest bid");
+        }
+
+        boolean updated = auction.placeBid(bidderTokenId, bidAmount);
+        if (!updated) {
+            return new BidResult(false, "Bid rejected");
+        }
+
+        System.out.println("NEW BID ACCEPTED:");
+        System.out.println("Item -> " + auction.getItem().getObjectId());
+        System.out.println("Bidder Token -> " + bidderTokenId);
+        System.out.println("New Highest Bid -> " + auction.getCurrentHighestBid());
+
+        return new BidResult(true, "Bid placed successfully");
+    }
 }

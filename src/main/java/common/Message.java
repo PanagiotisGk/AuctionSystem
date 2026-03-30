@@ -20,6 +20,7 @@ public class Message implements Serializable {
     private String sellerTokenId;
     private Double currentHighestBid;
     private Long remainingSeconds;
+    private Double bidAmount;
 
     public Message() {
     }
@@ -139,5 +140,13 @@ public class Message implements Serializable {
 
     public void setRemainingSeconds(Long remainingSeconds) {
         this.remainingSeconds = remainingSeconds;
+    }
+
+    public Double getBidAmount() {
+        return bidAmount;
+    }
+
+    public void setBidAmount(Double bidAmount) {
+        this.bidAmount = bidAmount;
     }
 }

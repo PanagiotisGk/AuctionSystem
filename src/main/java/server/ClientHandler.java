@@ -56,6 +56,10 @@ public class ClientHandler implements Runnable {
 
         } else if (request.getType() == MessageType.GET_AUCTION_DETAILS) {
             return handleGetAuctionDetails(request);
+
+
+        } else if (request.getType() == MessageType.PLACE_BID) {
+            return handlePlaceBid(request);
         }
         else {
             Message response = new Message(MessageType.ERROR);
@@ -168,6 +172,26 @@ public class ClientHandler implements Runnable {
         response.setSellerTokenId(currentAuction.getQueueEntry().getSellerTokenId());
         response.setCurrentHighestBid(currentAuction.getCurrentHighestBid());
         response.setRemainingSeconds(currentAuction.getRemainingSeconds());
+
+        return response;
+    }
+
+    private Message handlePlaceBid(Message request) {
+        Message response = new Message(MessageType.PLACE_BID_RESPONSE);
+
+        if (request.getBidAmount() == null) {
+            response.setSuccess(false);
+            response.setMessage("Missing bid amount.");
+            return response;
+        }
+
+        ServerState.BidResult result = serverState.placeBid(
+                request.getTokenId(),
+                request.getBidAmount()
+        );
+
+        response.setSuccess(result.isSuccess());
+        response.setMessage(result.getMessage());
 
         return response;
     }

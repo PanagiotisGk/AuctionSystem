@@ -14,13 +14,15 @@ public class PeerNode {
     private static final int SERVER_PORT = 8080;
 
     public static void main(String[] args) {
-        String username = "peer1";
-        String password = "1234";
-        int peerPort = 6001;
+        String username = args.length > 0 ? args[0] : "peer1";
+        String password = args.length > 1 ? args[1] : "1234";
+        int peerPort = args.length > 2 ? Integer.parseInt(args[2]) : 6001;
+
+        System.out.println("Starting peer with username=" + username + ", port=" + peerPort);
 
         PeerState peerState = new PeerState(username, peerPort);
 
-        // Ξεκινά local listener thread
+        // ξεκινά local listener thread
         Thread listenerThread = new Thread(new PeerListener(peerPort));
         listenerThread.start();
 
@@ -80,7 +82,7 @@ public class PeerNode {
             System.out.println("REQUEST_AUCTION -> " + requestAuctionResponse.getMessage());
             System.out.println("Peer is now active.");
             System.out.println("Type 'current' to get 'current' auction, 'details' for auction details\n" +
-                    " or  'logout' to terminate session.");
+                    " , 'bid <amount> to bid in auction or  'logout' to terminate session.");
 
             while (true) {
                 String input = scanner.nextLine();
@@ -136,9 +138,35 @@ public class PeerNode {
                         System.out.println("GET_AUCTION_DETAILS -> " + detailsResponse.getMessage());
                     }
 
+                } else if (command.toLowerCase().startsWith("bid ")) {
+                    String[] parts = command.split("\\s+", 2);
+
+                    if (parts.length != 2) {
+                        System.out.println("Usage: bid <amount>");
+                        continue;
+                    }
+
+                    try {
+                        double bidAmount = Double.parseDouble(parts[1]);
+
+                        Message bidMsg = new Message(MessageType.PLACE_BID);
+                        bidMsg.setTokenId(peerState.getTokenId());
+                        bidMsg.setBidAmount(bidAmount);
+
+                        out.writeObject(bidMsg);
+                        out.flush();
+
+                        Message bidResponse = (Message) in.readObject();
+                        System.out.println("PLACE_BID -> " + bidResponse.getMessage());
+
+                    } catch (NumberFormatException e) {
+                        System.out.println("Invalid bid amount. Usage: bid <amount>");
+                    }
+
+
 
                 } else {
-                    System.out.println("Unknown command. Eligible commands are: 'current', 'details' or 'logout'.");
+                    System.out.println("Unknown command. Eligible commands are: 'current', 'details', 'bid <amount>' or 'logout'.");
                 }
             }
 

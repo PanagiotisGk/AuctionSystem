@@ -75,4 +75,18 @@ public class AuctionState {
                 ", active=" + active +
                 '}';
     }
+
+    public synchronized boolean placeBid(String bidderTokenId, double newBidAmount) {
+        if (!active) {
+            return false;
+        }
+
+        if (newBidAmount <= currentHighestBid) {
+            return false;
+        }
+
+        currentHighestBid = newBidAmount;
+        currentHighestBidderToken = bidderTokenId;
+        return true;
+    }
 }

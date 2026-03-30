@@ -53,6 +53,9 @@ public class ClientHandler implements Runnable {
 
         } else if (request.getType() == MessageType.GET_CURRENT_AUCTION) {
             return handleGetCurrentAuction(request);
+
+        } else if (request.getType() == MessageType.GET_AUCTION_DETAILS) {
+            return handleGetAuctionDetails(request);
         }
         else {
             Message response = new Message(MessageType.ERROR);
@@ -137,7 +140,7 @@ public class ClientHandler implements Runnable {
 
         if (currentAuction == null || !currentAuction.isActive()) {
             response.setSuccess(false);
-            response.setMessage("No active auction");
+            response.setMessage("There is no active auction available");
             return response;
         }
 
@@ -145,6 +148,26 @@ public class ClientHandler implements Runnable {
         response.setMessage("Current auction fetched successfully");
         response.setObjectId(currentAuction.getItem().getObjectId());
         response.setDescription(currentAuction.getItem().getDescription());
+
+        return response;
+    }
+
+    private Message handleGetAuctionDetails(Message request) {
+        Message response = new Message(MessageType.GET_AUCTION_DETAILS_RESPONSE);
+
+        AuctionState currentAuction = serverState.getCurrentAuction();
+
+        if (currentAuction == null || !currentAuction.isActive()) {
+            response.setSuccess(false);
+            response.setMessage("There is no active auction available");
+            return response;
+        }
+
+        response.setSuccess(true);
+        response.setMessage("Auction details fetched successfully");
+        response.setSellerTokenId(currentAuction.getQueueEntry().getSellerTokenId());
+        response.setCurrentHighestBid(currentAuction.getCurrentHighestBid());
+        response.setRemainingSeconds(currentAuction.getRemainingSeconds());
 
         return response;
     }

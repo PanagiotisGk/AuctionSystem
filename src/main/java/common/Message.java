@@ -17,6 +17,9 @@ public class Message implements Serializable {
     private List<AuctionItem> items;
     private String objectId;
     private String description;
+    private String sellerTokenId;
+    private Double currentHighestBid;
+    private Long remainingSeconds;
 
     public Message() {
     }
@@ -112,5 +115,29 @@ public class Message implements Serializable {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public String getSellerTokenId() {
+        return sellerTokenId;
+    }
+
+    public void setSellerTokenId(String sellerTokenId) {
+        this.sellerTokenId = sellerTokenId;
+    }
+
+    public Double getCurrentHighestBid() {
+        return currentHighestBid;
+    }
+
+    public void setCurrentHighestBid(Double currentHighestBid) {
+        this.currentHighestBid = currentHighestBid;
+    }
+
+    public Long getRemainingSeconds() {
+        return remainingSeconds;
+    }
+
+    public void setRemainingSeconds(Long remainingSeconds) {
+        this.remainingSeconds = remainingSeconds;
     }
 }

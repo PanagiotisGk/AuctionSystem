@@ -185,7 +185,7 @@ public class PeerNode {
             loginMsg.setPort(peerPort);
             out.writeObject(loginMsg);
             out.flush();
-
+            //
             Message loginResponse = (Message) in.readObject();
             System.out.println("LOGIN -> " + loginResponse.getMessage());
 
@@ -219,7 +219,7 @@ public class PeerNode {
             System.out.println("Type 'current' to get 'current' auction, 'details' for auction details\n" +
                     " , 'bid <amount> to bid in auction or  'logout' to terminate session.");
 
-            //εδώ ξεκινάει το random generator , αφού καλέσαμε τη request action
+            //εδώ καλούμε να ξεκινήσει το random generator , αφού καλέσαμε τη request action
             startItemGenerator(sharedDir, peerState.getTokenId(), SERVER_HOST, SERVER_PORT, username);
             startAutoBidder(peerState.getTokenId(), SERVER_HOST, SERVER_PORT);
 

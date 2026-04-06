@@ -2,7 +2,7 @@ package server;
 
 import java.net.ServerSocket;
 import java.net.Socket;
-
+//ανοιγουμε port και ξεκινάμε το server
 public class AuctionServer {
     public static final int SERVER_PORT = 8080;
 
@@ -16,7 +16,7 @@ public class AuctionServer {
         try (ServerSocket serverSocket = new ServerSocket(SERVER_PORT)) {
             System.out.println("Auction Server started on port " + SERVER_PORT);
 
-            while (true) {
+            while (true) {   // για να βρουμε νέα συνδεση απο peer
                 Socket clientSocket = serverSocket.accept();
                 System.out.println("New peer connected from " + clientSocket.getInetAddress().getHostAddress());
 

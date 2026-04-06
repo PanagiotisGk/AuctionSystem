@@ -12,6 +12,13 @@ public class ClientHandler implements Runnable {
     private final ServerState serverState;
     private String currentTokenId = null;
 
+
+    /**
+     * Αρχικοποιούμε
+     *
+     * @param socket
+     * @param serverState
+     */
     public ClientHandler(Socket socket, ServerState serverState) {
         this.socket = socket;
         this.serverState = serverState;
@@ -42,7 +49,12 @@ public class ClientHandler implements Runnable {
     }
 
 
-
+    /**
+     * Αντιμετωπίζει όλα τα requests που κάνει ένας client
+     *
+     * @param request
+     * @return
+     */
     private Message handleRequest(Message request) {
         if (request.getType() == MessageType.REGISTER) {
             return handleRegister(request);
@@ -63,7 +75,7 @@ public class ClientHandler implements Runnable {
         } else if (request.getType() == MessageType.PLACE_BID) {
             return handlePlaceBid(request);
         }
-
+        // μήνυμα για όταν ένας peer αγοράζει ένα item και αυτό μεταφέρεται στον dir του
         else if (request.getType() == MessageType.ITEM_ACQUIRED) {
             System.out.println("[SERVER] Item " + request.getObjectId()
                     + " is now owned by: " + request.getMessage());
@@ -80,6 +92,13 @@ public class ClientHandler implements Runnable {
         }
     }
 
+    /**
+     * Είσοδος ενός user
+     *
+     *
+     * @param request
+     * @return
+     */
     private Message handleRegister(Message request) {
         String result = serverState.registerUser(request.getUsername(), request.getPassword());
 
@@ -94,6 +113,13 @@ public class ClientHandler implements Runnable {
         return response;
     }
 
+
+    /**
+     * Είσοδος με στοιχεία peer
+     *
+     * @param request
+     * @return
+     */
     private Message handleLogin(Message request) {
         String clientIp = socket.getInetAddress().getHostAddress();
         int peerPort = request.getPort() != null ? request.getPort() : -1;
@@ -116,6 +142,13 @@ public class ClientHandler implements Runnable {
         return response;
     }
 
+
+    /**
+     * Έξοδος peer
+     *
+     * @param request
+     * @return
+     */
     private Message handleLogout(Message request) {
         String result = serverState.logoutUser(request.getTokenId());
 
@@ -130,6 +163,12 @@ public class ClientHandler implements Runnable {
         return response;
     }
 
+    /**
+     * Καταχώρηση αντικειμένων για δημοπρασία
+     *
+     * @param request
+     * @return
+     */
     private Message handleRequestAuction(Message request) {
         String result = serverState.requestAuction(request.getTokenId(), request.getItems());
 
@@ -151,7 +190,12 @@ public class ClientHandler implements Runnable {
     }
 
 
-
+    /**
+     * Εντολή current από τον peer, επιστρέφει την τρέχουσα δημοπρασία
+     *
+     * @param request
+     * @return
+     */
     private Message handleGetCurrentAuction(Message request) {
         Message response = new Message(MessageType.GET_CURRENT_AUCTION_RESPONSE);
 

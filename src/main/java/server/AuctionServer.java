@@ -9,6 +9,10 @@ public class AuctionServer {
     public static void main(String[] args) {
         ServerState serverState = new ServerState();
 
+        Thread auctionMonitorThread = new Thread(new AuctionMonitor(serverState));
+        auctionMonitorThread.setDaemon(true);
+        auctionMonitorThread.start();
+
         try (ServerSocket serverSocket = new ServerSocket(SERVER_PORT)) {
             System.out.println("Auction Server started on port " + SERVER_PORT);
 

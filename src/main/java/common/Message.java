@@ -21,9 +21,33 @@ public class Message implements Serializable {
     private Double currentHighestBid;
     private Long remainingSeconds;
     private Double bidAmount;
+    private String sellerIp;
+    private Integer sellerPort;
+    private String fileName;
+    private byte[] fileContent;
+    private String sellerUsername;
+
+
 
     public Message() {
     }
+
+    public void setSellerTokenId(String sellerTokenId) {
+        this.sellerTokenId = sellerTokenId;
+    }
+
+    public String getSellerTokenId() {
+        return sellerTokenId;
+    }
+
+    public String getSellerUsername() { return sellerUsername; }
+    public void setSellerUsername(String sellerUsername) { this.sellerUsername = sellerUsername; }
+
+    public String getSellerIp() { return sellerIp; }
+    public void setSellerIp(String sellerIp) { this.sellerIp = sellerIp; }
+
+    public Integer getSellerPort() { return sellerPort; }
+    public void setSellerPort(Integer sellerPort) { this.sellerPort = sellerPort; }
 
     public Message(MessageType type) {
         this.type = type;
@@ -118,13 +142,6 @@ public class Message implements Serializable {
         this.description = description;
     }
 
-    public String getSellerTokenId() {
-        return sellerTokenId;
-    }
-
-    public void setSellerTokenId(String sellerTokenId) {
-        this.sellerTokenId = sellerTokenId;
-    }
 
     public Double getCurrentHighestBid() {
         return currentHighestBid;
@@ -145,6 +162,12 @@ public class Message implements Serializable {
     public Double getBidAmount() {
         return bidAmount;
     }
+
+    public String getFileName() { return fileName; }
+    public void setFileName(String fileName) { this.fileName = fileName; }
+
+    public byte[] getFileContent() { return fileContent; }
+    public void setFileContent(byte[] fileContent) { this.fileContent = fileContent; }
 
     public void setBidAmount(Double bidAmount) {
         this.bidAmount = bidAmount;

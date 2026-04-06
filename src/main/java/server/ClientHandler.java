@@ -10,6 +10,7 @@ import java.net.Socket;
 public class ClientHandler implements Runnable {
     private final Socket socket;
     private final ServerState serverState;
+    private String currentTokenId = null;
 
     public ClientHandler(Socket socket, ServerState serverState) {
         this.socket = socket;
@@ -34,8 +35,9 @@ public class ClientHandler implements Runnable {
                 out.flush();
             }
 
-        } catch (Exception e) {
+        } catch (Exception exc) {
             System.out.println("Client disconnected: " + socket.getInetAddress().getHostAddress());
+            serverState.handlePeerDisconnect(currentTokenId);
         }
     }
 
@@ -60,6 +62,15 @@ public class ClientHandler implements Runnable {
 
         } else if (request.getType() == MessageType.PLACE_BID) {
             return handlePlaceBid(request);
+        }
+
+        else if (request.getType() == MessageType.ITEM_ACQUIRED) {
+            System.out.println("[SERVER] Item " + request.getObjectId()
+                    + " is now owned by: " + request.getMessage());
+            Message response = new Message(MessageType.ITEM_ACQUIRED);
+            response.setSuccess(true);
+            response.setMessage("Item acquisition recorded");
+            return response;
         }
         else {
             Message response = new Message(MessageType.ERROR);
@@ -93,6 +104,10 @@ public class ClientHandler implements Runnable {
                 clientIp,
                 peerPort
         );
+
+        if (result.isSuccess()) {
+            currentTokenId = result.getTokenId(); // αποθήκευουμε το token
+        }
 
         Message response = new Message(MessageType.LOGIN_RESPONSE);
         response.setSuccess(result.isSuccess());
@@ -169,6 +184,7 @@ public class ClientHandler implements Runnable {
 
         response.setSuccess(true);
         response.setMessage("Auction details fetched successfully");
+        response.setSellerUsername(currentAuction.getQueueEntry().getSellerUsername());
         response.setSellerTokenId(currentAuction.getQueueEntry().getSellerTokenId());
         response.setCurrentHighestBid(currentAuction.getCurrentHighestBid());
         response.setRemainingSeconds(currentAuction.getRemainingSeconds());

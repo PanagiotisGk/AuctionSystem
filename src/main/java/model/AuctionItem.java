@@ -36,7 +36,7 @@ public class AuctionItem implements Serializable {
         return "AuctionItem{" +
                 "objectId='" + objectId + '\'' +
                 ", description='" + description + '\'' +
-                ", startingBid=" + startBid +
+                ", startBid=" + startBid +
                 ", auctionDuration=" + auctionDuration +
                 '}';
     }

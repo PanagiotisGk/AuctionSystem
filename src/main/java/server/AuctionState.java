@@ -8,7 +8,7 @@ public class AuctionState {
     private String currentHighestBidderToken;
     private final long startTimeMillis;
     private final long endTimeMillis;
-    private boolean active;
+    private AuctionStatus status;
 
     public AuctionState(AuctionQueueEntry queueEntry) {
         this.queueEntry = queueEntry;
@@ -16,7 +16,15 @@ public class AuctionState {
         this.currentHighestBidderToken = null;
         this.startTimeMillis = System.currentTimeMillis();
         this.endTimeMillis = startTimeMillis + (queueEntry.getItem().getAuctionDuration() * 1000L);
-        this.active = true;
+        this.status = AuctionStatus.ACTIVE;
+    }
+
+    public enum AuctionStatus {
+        QUEUED,
+        ACTIVE,
+        SOLD,
+        NO_BIDS,
+        CANCELLED
     }
 
     public AuctionQueueEntry getQueueEntry() {
@@ -29,6 +37,17 @@ public class AuctionState {
 
     public synchronized void setCurrentHighestBid(double currentHighestBid) {
         this.currentHighestBid = currentHighestBid;
+    }
+    public synchronized AuctionStatus getStatus() {
+        return status;
+    }
+
+    public synchronized void setStatus(AuctionStatus status) {
+        this.status = status;
+    }
+
+    public synchronized boolean isActive() {
+        return status == AuctionStatus.ACTIVE;
     }
 
     public synchronized String getCurrentHighestBidderToken() {
@@ -47,13 +66,6 @@ public class AuctionState {
         return endTimeMillis;
     }
 
-    public synchronized boolean isActive() {
-        return active;
-    }
-
-    public synchronized void setActive(boolean active) {
-        this.active = active;
-    }
 
     public long getRemainingSeconds() {
         long remaining = (endTimeMillis - System.currentTimeMillis()) / 1000;
@@ -72,12 +84,12 @@ public class AuctionState {
                 ", currentHighestBid=" + currentHighestBid +
                 ", currentHighestBidderToken='" + currentHighestBidderToken + '\'' +
                 ", remainingSeconds=" + getRemainingSeconds() +
-                ", active=" + active +
+                ", active=" + isActive() +
                 '}';
     }
 
     public synchronized boolean placeBid(String bidderTokenId, double newBidAmount) {
-        if (!active) {
+        if (!isActive()) {
             return false;
         }
 

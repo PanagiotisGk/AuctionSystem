@@ -2,10 +2,14 @@ package server;
 
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import common.Message;
+import common.MessageType;
 import model.AuctionItem;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.net.Socket;
+import java.io.ObjectOutputStream;
 
 
 public class ServerState {
@@ -14,6 +18,44 @@ public class ServerState {
     private final ConcurrentHashMap<String, String> usernameToToken = new ConcurrentHashMap<>();
     private final ConcurrentLinkedQueue<AuctionQueueEntry> auctionQueue = new ConcurrentLinkedQueue<>();
     private volatile AuctionState currentAuction;
+
+
+
+    private void notifyPeer(SessionInfo session, String eventType, AuctionState auction, double finalBid) {
+        if (session == null) return;
+        new Thread(() -> {
+            try (
+                    Socket socket = new Socket(session.getIpAddress(), session.getPort());
+                    ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream())
+            ) {
+                Message msg = new Message(MessageType.NOTIFICATION);
+                msg.setMessage(eventType);
+                msg.setObjectId(auction.getItem().getObjectId());
+                msg.setBidAmount(finalBid);
+
+                // Αν είναι ο winner, στέλνουμε και τα στοιχεία του seller
+                if ("AUCTION_WON".equals(eventType)) {
+                    SessionInfo sellerSession = activeSessionsByToken.get(
+                            auction.getQueueEntry().getSellerTokenId()
+                    );
+                    System.out.println("sellerSession: " + sellerSession);
+                    if (sellerSession != null) {
+                        System.out.println("sellerIp: " + sellerSession.getIpAddress());
+                        System.out.println("sellerPort: " + sellerSession.getPort());
+                        msg.setSellerIp(sellerSession.getIpAddress());
+                        msg.setSellerPort(sellerSession.getPort());
+                    }
+                }
+
+                out.writeObject(msg);
+                out.flush();
+            } catch (Exception e) {
+                System.out.println("Could not notify peer: " + session.getUsername());
+            }
+        }).start();
+    }
+
+
 
     public synchronized String registerUser(String username, String password) {
         if (username == null || username.isBlank() || password == null || password.isBlank()) {
@@ -50,6 +92,76 @@ public class ServerState {
         usernameToToken.put(username, tokenId);
 
         return new LoginResult(true, tokenId, "SUCCESS");
+    }
+
+
+
+    public synchronized void checkAndFinalizeExpiredAuction() {
+
+
+
+        try {
+            if (currentAuction == null || !currentAuction.isActive()) {
+                return;
+            }
+
+            if (currentAuction.getRemainingSeconds() > 0) {
+                return;
+            }
+
+            AuctionState finishedAuction = currentAuction;
+            double finalBid = finishedAuction.getCurrentHighestBid();
+            String winnerToken = finishedAuction.getCurrentHighestBidderToken();
+
+
+            SessionInfo sellerSession = activeSessionsByToken.get(finishedAuction.getQueueEntry().getSellerTokenId());
+            SessionInfo winnerSession = (winnerToken != null)  ? activeSessionsByToken.get(winnerToken) : null; // null αν δεν υπάρχει winner
+
+            if (winnerToken == null) {
+                finishedAuction.setStatus(AuctionState.AuctionStatus.NO_BIDS);
+            } else {
+                finishedAuction.setStatus(AuctionState.AuctionStatus.SOLD);
+            }
+
+
+            System.out.println("AUCTION FINISHED:");
+            System.out.println("Item -> " + currentAuction.getItem().getObjectId());
+            System.out.println("Seller -> " + currentAuction.getQueueEntry().getSellerUsername());
+            System.out.println("Final Highest Bid -> " + currentAuction.getCurrentHighestBid());
+
+            if (winnerToken == null) {
+                finishedAuction.setStatus(AuctionState.AuctionStatus.NO_BIDS);
+                System.out.println("Result -> No bids were placed. No winner.");
+                if (sellerSession != null) notifyPeer(sellerSession, "AUCTION_NO_BIDS", currentAuction, finalBid);
+            } else {
+                String winnerUsername = (winnerSession != null) ? winnerSession.getUsername() : "UNKNOWN";
+
+                System.out.println("Result -> Winner found");
+                System.out.println("Winner Token -> " + winnerToken);
+                System.out.println("Winner Username -> " + winnerUsername);
+
+                //Αφού βρουμε winner και seller:
+                if (winnerSession != null) notifyPeer(winnerSession, "AUCTION_WON", currentAuction, finalBid);
+                if (sellerSession != null) notifyPeer(sellerSession, "AUCTION_SOLD", currentAuction, finalBid);
+
+                User sellerUser = registeredUsers.get(currentAuction.getQueueEntry().getSellerUsername());
+                if (sellerUser != null) {
+                    sellerUser.incrementNumAuctionsSeller();
+                }
+
+                if (winnerSession != null) {
+                    User winnerUser = registeredUsers.get(winnerSession.getUsername());
+                    if (winnerUser != null) {
+                        winnerUser.incrementNumAuctionsBidder();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.out.println("ERROR inside checkAndFinalizeExpiredAuction:");
+            e.printStackTrace();
+            currentAuction = null; // reset για να μην ξαναμπεί
+        }
+        startNextAuctionIfNeeded();
     }
 
     public synchronized String logoutUser(String tokenId) {
@@ -99,7 +211,10 @@ public class ServerState {
         }
 
         for (AuctionItem item : items) {
+            String auctionId = UUID.randomUUID().toString();
+
             AuctionQueueEntry entry = new AuctionQueueEntry(
+                    auctionId,
                     sessionInfo.getTokenId(),
                     sessionInfo.getUsername(),
                     sessionInfo.getIpAddress(),
@@ -124,23 +239,30 @@ public class ServerState {
         AuctionQueueEntry nextEntry = auctionQueue.poll();
         if (nextEntry == null) {
             currentAuction = null;
+            System.out.println("No auction available in queue.");
             return;
         }
 
         currentAuction = new AuctionState(nextEntry);
-        System.out.println("NEW CURRENT AUCTION STARTED:");
-        System.out.println(currentAuction);
+
+        System.out.println("---NEW CURRENT AUCTION STARTED---");
+        System.out.println("Auction ID -> " + currentAuction.getQueueEntry().getAuctionId());
+        System.out.println("Item -> " + currentAuction.getItem().getObjectId());
+        System.out.println("Description -> " + currentAuction.getItem().getDescription());
+        System.out.println("Seller -> " + currentAuction.getQueueEntry().getSellerUsername());
+        System.out.println("Start Bid -> " + currentAuction.getCurrentHighestBid());
+        System.out.println("Duration -> " + currentAuction.getItem().getAuctionDuration() + " seconds");
     }
 
     public synchronized AuctionState getCurrentAuction() {
-        if (currentAuction != null && currentAuction.isActive()) {
-            if (currentAuction.getRemainingSeconds() <= 0) {
-                currentAuction.setActive(false);
-                System.out.println("AUCTION FINISHED:");
-                System.out.println(currentAuction);
-                startNextAuctionIfNeeded();
-            }
+        if (currentAuction == null) {
+            return null;
         }
+
+        if (!currentAuction.isActive()) {
+            return null;
+        }
+
         return currentAuction;
     }
 
@@ -162,6 +284,61 @@ public class ServerState {
             return message;
         }
     }
+    // ενημερώνουμε όλους τους peers ότι αποχώρησε κάποιος από την δημοπρασία
+    private void notifyAllPeers(String eventType, String message) {
+        for (SessionInfo session : activeSessionsByToken.values()) {
+            new Thread(() -> {
+                try (
+                        Socket socket = new Socket(session.getIpAddress(), session.getPort());
+                        ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream())
+                ) {
+                    Message msg = new Message(MessageType.NOTIFICATION);
+                    msg.setMessage(eventType);
+                    msg.setObjectId(message);
+                    out.writeObject(msg);
+                    out.flush();
+                } catch (Exception e) {
+                    System.out.println("Could not notify peer: " + session.getUsername());
+                }
+            }).start();
+        }
+    }
+
+    public synchronized void handlePeerDisconnect(String tokenId) {
+        if (tokenId == null) return;
+
+        //αφαιρούμε από την ουρά όλα τα αντικείμενα του peer
+        auctionQueue.removeIf(entry -> {
+            if (entry.getSellerTokenId().equals(tokenId)) {
+                System.out.println("[INFO] Removing queued item: " + entry.getItem().getObjectId());
+                return true;
+            }
+            return false;
+        });
+
+        //ακυρώνουμε την τρέχουσα δημοπρασία αν ο seller είναι αυτός που έπεσε
+        if (currentAuction != null && currentAuction.isActive()) {
+            String sellerTokenId = currentAuction.getQueueEntry().getSellerTokenId();
+            if (sellerTokenId.equals(tokenId)) {
+                System.out.println("[INFO] Removing active auction item: "
+                        + currentAuction.getItem().getObjectId());
+                System.out.println("Seller disconnected, maybe he didn't find a warm crowd... Cancelling auction: "
+                        + currentAuction.getItem().getDescription());
+                currentAuction.setStatus(AuctionState.AuctionStatus.CANCELLED);
+                currentAuction = null;
+            }
+        }
+
+        SessionInfo disconnectedSession = activeSessionsByToken.get(tokenId);
+        String disconnectedUsername = (disconnectedSession != null) ? disconnectedSession.getUsername() : "Unknown";
+
+        // Ενημέρωσε όλους τους peers
+        notifyAllPeers("PEER_DISCONNECTED", disconnectedUsername + " has disconnected.");
+
+        // επόμενο item
+        startNextAuctionIfNeeded();
+        logoutUser(tokenId);
+    }
 
 
     public synchronized BidResult placeBid(String bidderTokenId, double bidAmount) {
@@ -173,13 +350,12 @@ public class ServerState {
 
         AuctionState auction = getCurrentAuction();
 
-        if (auction == null || !auction.isActive()) {
+        if (auction == null) { //το getCurrentAuction θα μου επιστρέψει ούτως ή αλλως κενό
             return new BidResult(false, "No active auction");
         }
 
         if (auction.getRemainingSeconds() <= 0) {
-            auction.setActive(false);
-            startNextAuctionIfNeeded();
+            checkAndFinalizeExpiredAuction();
             return new BidResult(false, "Sorry, auction has already ended");
         }
 
@@ -200,6 +376,7 @@ public class ServerState {
         System.out.println("NEW BID ACCEPTED:");
         System.out.println("Item -> " + auction.getItem().getObjectId());
         System.out.println("Bidder Token -> " + bidderTokenId);
+        System.out.println("Bidder Id -> " + bidderSession.getUsername());
         System.out.println("New Highest Bid -> " + auction.getCurrentHighestBid());
 
         return new BidResult(true, "Bid placed successfully");

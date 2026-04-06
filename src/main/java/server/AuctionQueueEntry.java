@@ -8,13 +8,20 @@ public class AuctionQueueEntry {
     private final String sellerIpAddress;
     private final int sellerPort;
     private final AuctionItem item;
+    private final String auctionId;
 
-    public AuctionQueueEntry(String sellerTokenId, String sellerUsername, String sellerIpAddress, int sellerPort, AuctionItem item) {
+    public AuctionQueueEntry(String auctionId, String sellerTokenId, String sellerUsername,
+                             String sellerIpAddress, int sellerPort, AuctionItem item) {
+        this.auctionId = auctionId;
         this.sellerTokenId = sellerTokenId;
         this.sellerUsername = sellerUsername;
         this.sellerIpAddress = sellerIpAddress;
         this.sellerPort = sellerPort;
         this.item = item;
+    }
+
+    public String getAuctionId() {
+        return auctionId;
     }
 
     public String getSellerTokenId() {

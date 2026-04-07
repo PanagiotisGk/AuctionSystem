@@ -8,13 +8,29 @@ import java.io.FileReader;
 import java.util.ArrayList;
 import java.util.List;
 
+
+/**
+ * Η κλάση SharedDirectoryManager διαχειρίζεται τον τοπικό φάκελο
+ * του peer όπου αποθηκεύονται τα αντικείμενα προς δημοπράτηση. Κάθε αντικείμενο αντιστοιχεί σε ένα αρχείο .txt με συγκεκριμένα
+ * metadata (object_id, description, start_bid, auction_duration).
+ */
+
 public class SharedDirectoryManager {
     private final String sharedDirectoryPath;
 
+
+
+    // Κατασκευαστης
     public SharedDirectoryManager(String sharedDirectoryPath) {
         this.sharedDirectoryPath = sharedDirectoryPath;
     }
 
+
+    /**
+     * Φορτώνει όλα τα αντικείμενα από τον shared directory.
+     * Διαβάζει όλα τα .txt αρχεία και τα μετατρέπει σε AuctionItem. Αν ένα αρχείο δεν έχει σωστό format, το παραλείπει.
+     * @return
+     */
     public List<AuctionItem> loadItems() {
         List<AuctionItem> items = new ArrayList<>();
 
@@ -44,6 +60,18 @@ public class SharedDirectoryManager {
         return items;
     }
 
+    /**
+     * Το format του αρχείου είναι key=value ανά γραμμή:
+     * object_id=Object_01
+     * description=Samsung Galaxy S21
+     * start_bid=150.0
+     * auction_duration=30
+     *
+     *
+     * @param file
+     * @return
+     * @throws IllegalArgumentException
+     */
     private AuctionItem parseItemFile(File file) throws Exception {
         String objectId = null;
         String description = null;

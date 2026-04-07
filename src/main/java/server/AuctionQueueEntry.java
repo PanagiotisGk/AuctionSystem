@@ -2,6 +2,9 @@ package server;
 
 import model.AuctionItem;
 
+/**
+ * Με αυτή τη κλάση εισάγονται τα προϊοντα στην ουρά δημοπρασίας
+ */
 public class AuctionQueueEntry {
     private final String sellerTokenId;
     private final String sellerUsername;
@@ -10,6 +13,16 @@ public class AuctionQueueEntry {
     private final AuctionItem item;
     private final String auctionId;
 
+    /**
+     * Αρχικοποίηση της κλάσης και των μεταβλητών
+     *
+     * @param auctionId
+     * @param sellerTokenId
+     * @param sellerUsername
+     * @param sellerIpAddress
+     * @param sellerPort
+     * @param item
+     */
     public AuctionQueueEntry(String auctionId, String sellerTokenId, String sellerUsername,
                              String sellerIpAddress, int sellerPort, AuctionItem item) {
         this.auctionId = auctionId;
@@ -20,24 +33,16 @@ public class AuctionQueueEntry {
         this.item = item;
     }
 
+    // η ID της δημοπρασίας
     public String getAuctionId() {
         return auctionId;
     }
-
     public String getSellerTokenId() {
         return sellerTokenId;
     }
 
     public String getSellerUsername() {
         return sellerUsername;
-    }
-
-    public String getSellerIpAddress() {
-        return sellerIpAddress;
-    }
-
-    public int getSellerPort() {
-        return sellerPort;
     }
 
     public AuctionItem getItem() {

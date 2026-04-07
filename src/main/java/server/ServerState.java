@@ -232,6 +232,16 @@ public class ServerState {
             return "Invalid token";
         }
 
+        // eκτύπωση στατιστικών peer κατά το logout
+        User user = registeredUsers.get(sessionInfo.getUsername());
+        if (user != null) {
+            System.out.println("---PEER STATS ON LOGOUT---");
+            System.out.println("Username -> " + user.getUsername());
+            System.out.println("Auctions as Seller -> " + user.getNumAuctionsSeller());
+            System.out.println("Auctions won as Bidder -> " + user.getNumAuctionsBidder());
+            System.out.println("--------------------------");
+        }
+
         usernameToToken.remove(sessionInfo.getUsername());
         return "SUCCESS";
     }

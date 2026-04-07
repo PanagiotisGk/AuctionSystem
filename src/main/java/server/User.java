@@ -6,6 +6,12 @@ public class User {
     private int numAuctionsSeller;
     private int numAuctionsBidder;
 
+    /**
+     *
+     *
+     * @param username
+     * @param password
+     */
     public User(String username, String password) {
         this.username = username;
         this.password = password;

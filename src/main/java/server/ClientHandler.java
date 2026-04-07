@@ -215,6 +215,13 @@ public class ClientHandler implements Runnable {
         return response;
     }
 
+
+    /**
+     * Εντολή details, επιστρέφει τις λεπτομέρειες της δημοπρασίας
+     *
+     * @param request
+     * @return
+     */
     private Message handleGetAuctionDetails(Message request) {
         Message response = new Message(MessageType.GET_AUCTION_DETAILS_RESPONSE);
 
@@ -236,6 +243,13 @@ public class ClientHandler implements Runnable {
         return response;
     }
 
+
+    /**
+     * Εντολή καταχώρησης bid, επιστρέφει την επιτυχή καταχώρηση bid ή την αποτυχία αυτής.
+     *
+     * @param request
+     * @return
+     */
     private Message handlePlaceBid(Message request) {
         Message response = new Message(MessageType.PLACE_BID_RESPONSE);
 

@@ -2,6 +2,12 @@ package server;
 
 import model.AuctionItem;
 
+/**
+ * Η κλάση AuctionState αναπαριστά την κατάσταση μιας δημοπρασίας.
+ * Διατηρεί πληροφορίες για το αντικείμενο, την τρέχουσα υψηλότερη
+ * προσφορά, τον χρόνο έναρξης και λήξης αλλά και την κατάσταση της δημοπρασίας. Οι μέθοδοι είναι συγχρονισμένες(synchronized) για ασφαλή πρόσβαση από πολλά threads.
+ */
+
 public class AuctionState {
     private final AuctionQueueEntry queueEntry;
     private double currentHighestBid;
@@ -19,8 +25,14 @@ public class AuctionState {
         this.status = AuctionStatus.ACTIVE;
     }
 
+    /**
+     * Enum με τις δυνατές καταστάσεις μιας δημοπρασίας:
+     * ACTIVE    - Σε εξέλιξη
+     * SOLD      - Ολοκληρώθηκε με winner
+     * NO_BIDS   - Ολοκληρώθηκε χωρίς προσφορές
+     * CANCELLED - Ακυρώθηκε λόγω αποσύνδεσης seller
+     */
     public enum AuctionStatus {
-        QUEUED,
         ACTIVE,
         SOLD,
         NO_BIDS,
@@ -46,6 +58,7 @@ public class AuctionState {
         this.status = status;
     }
 
+    // ελέγχουμε αν η δημοπρασία είναι ενεργή
     public synchronized boolean isActive() {
         return status == AuctionStatus.ACTIVE;
     }
@@ -88,6 +101,14 @@ public class AuctionState {
                 '}';
     }
 
+    /**
+     * Καταχωρεί μια νέα προσφορά αν η δημοπρασία είναι ενεργή
+     * και η νέα προσφορά είναι μεγαλύτερη από την τρέχουσα.
+     *
+     * @param bidderTokenId το token του peer που κάνει την προσφορά
+     * @param newBidAmount το ποσό της νέας προσφοράς
+     * @return true αν η προσφορα έγινε αποδεκτή και false αλλιώς
+     */
     public synchronized boolean placeBid(String bidderTokenId, double newBidAmount) {
         if (!isActive()) {
             return false;

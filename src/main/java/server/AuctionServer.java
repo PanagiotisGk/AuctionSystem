@@ -2,7 +2,12 @@ package server;
 
 import java.net.ServerSocket;
 import java.net.Socket;
-//ανοιγουμε port και ξεκινάμε το server
+/**
+ * Η κύρια κλάση του Auction Server.
+ * Ξεκινά τον server, αρχικοποιεί τον AuctionMonitor και αναμένει
+ * συνδέσεις από peers. Για κάθε νέο peer δημιουργεί ξεχωριστό thread μέσω του ClientHandler ώστε να εξυπηρετούνται ταυτόχρονα.
+ *
+ */
 public class AuctionServer {
     public static final int SERVER_PORT = 8080;
 

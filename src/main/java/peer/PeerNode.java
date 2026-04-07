@@ -13,10 +13,34 @@ import java.net.Socket;
 import java.util.Random;
 import java.util.Scanner;
 
+
+/**
+ * Η κύρια κλάση του Peer/Bidder. Κάθε peer συνδέεται με τον Auction Server,
+ * εγγράφεται, κάνει login, και μπορεί να δημοπρατεί αντικείμενα ή να κάνει bid σε δημοπρασίες.
+ * Παράλληλα τρέχουν δύο background threads:
+ * ---- ItemGenerator: παράγει αντικείμενα σε τυχαία χρονικά διαστήματα
+ * ---- AutoBidder: ελέγχει και bidάρει αυτόματα σε δημοπρασίες
+ */
+
 public class PeerNode {
     private static final String SERVER_HOST = "127.0.0.1";
     private static final int SERVER_PORT = 8080;
 
+
+    /**
+     * Παράγει αντικείμενα σε τυχαία χρονικά διαστήματα και τα στέλνει
+     * στον server για δημοπράτηση. Κάθε αντικείμενο αποθηκεύεται ως
+     * .txt αρχείο στο shared directory του peer.
+     * Ο χρόνος αναμονής είναι RAND * 120 seconds (30-120 sec).
+     * Χρησιμοποιεί ξεχωριστό socket για κάθε αίτηση ώστε να αποφεύγονται
+     * race conditions με το κύριο socket του peer.
+     *
+     * @param sharedDir  Το shared directory του peer
+     * @param tokenId    Το token του peer για ταυτοποίηση
+     * @param serverHost Η IP του server
+     * @param serverPort Η θύρα του server
+     * @param username   Το username του peer
+     */
     private static void startItemGenerator(String sharedDir, String tokenId,
                                            String serverHost, int serverPort, String username) {
         new Thread(() -> {
@@ -25,16 +49,18 @@ public class PeerNode {
 
             while (true) {
                 try {
+                    // τυχαία αναμονή: RAND * 120 seconds (30-120 sec)
                     long waitSeconds = 30 + (long) (rand.nextDouble() * 90);
                     System.out.println("[GENERATOR] Next item in " + waitSeconds + " seconds...");
                     Thread.sleep(waitSeconds * 1000);
 
+                    // Δημιουργία νέου αντικειμένου με τυχαία στοιχεία, συμφωνεί στο πρότυπο
                     String objectId = "Object_" + String.format("%02d", itemCounter++);
                     String description = "Auto-generated item " + objectId;
-                    double startBid = 10 + rand.nextInt(190);
-                    int duration = 30 + rand.nextInt(60);
+                    double startBid = 10 + rand.nextInt(190); // τυχαία τιμή 10-200
+                    int duration = 30 + rand.nextInt(60); // τυχαία διάρκεια 30-90 sec
 
-                    // Γράψιμο αρχείου
+                    // γράψιμο αρχείου
                     File dir = new File(sharedDir);
                     if (!dir.exists()) dir.mkdirs();
 
@@ -47,7 +73,7 @@ public class PeerNode {
                     }
                     System.out.println("[GENERATOR] Created item: " + objectId);
 
-                    // Νέο socket για αποστολή στον server
+                    // Νέο socket για αποστολή αντικειμένου στον server
                     try (
                             Socket socket = new Socket(serverHost, serverPort);
                             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
@@ -71,6 +97,15 @@ public class PeerNode {
         }).start();
     }
 
+    /**
+     * Ελέγχει αυτόματα ανά 1 λεπτό αν υπάρχει ενεργή δημοπρασία και αποφασίζει αν θα κάνει bid με πιθανότητα 60% (coin flip).
+     * Αν αποφασίσει να bidάρει, υπολογίζει την προσφορά με τον τύπο:
+     * NewBid = HighestBid * (1 + RAND/10) — αύξηση έως 10%.
+     * Χρησιμοποιεί ξεχωριστό socket για κάθε κύκλο ώστε να αποφεύγονται race conditions με το κύριο socket του peer.
+     * @param tokenId    Το token του peer για ταυτοποίηση
+     * @param serverHost Η IP του server
+     * @param serverPort Η θύρα του server
+     */
     private static void startAutoBidder(String tokenId, String serverHost, int serverPort) {
         new Thread(() -> {
             Random rand = new Random();
@@ -79,13 +114,13 @@ public class PeerNode {
                 try {
                     Thread.sleep(60 * 1000);
 
-                    // Νέα σύνδεση για κάθε auto-bid cycle, γιατί χαλάει τα messages των λειτουργιών current και details
+                    //νέα σύνδεση για κάθε auto-bid cycle γιατί χαλάει τα messages των λειτουργιών current και details
                     try (
                             Socket socket = new Socket(serverHost, serverPort);
                             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
                             ObjectInputStream in = new ObjectInputStream(socket.getInputStream())
                     ) {
-                        // GET_CURRENT_AUCTION
+                        //στοιχεία για την δημοπρασία, ώστε να ξεκινήσει το auto-bid
                         Message currentMsg = new Message(MessageType.GET_CURRENT_AUCTION);
                         currentMsg.setTokenId(tokenId);
                         out.writeObject(currentMsg);
@@ -99,12 +134,13 @@ public class PeerNode {
 
                         System.out.println("[AUTO-BID] Current auction: " + currentResponse.getObjectId());
 
+                        // Coin flip: 60% πιθανότητα ενδιαφέροντος
                         if (rand.nextDouble() > 0.6) {
                             System.out.println("[AUTO-BID] Not interested this time.");
                             continue;
                         }
 
-                        // GET_AUCTION_DETAILS
+                        // παίρνουμε λεπτομέρειες
                         Message detailsMsg = new Message(MessageType.GET_AUCTION_DETAILS);
                         detailsMsg.setTokenId(tokenId);
                         out.writeObject(detailsMsg);
@@ -122,11 +158,12 @@ public class PeerNode {
                             continue;
                         }
 
+                        // υπολογισμός νέας προσφοράς: NewBid = HighestBid * (1 + RAND/10)
                         double newBid = highestBid * (1 + rand.nextDouble() / 10);
                         newBid = Math.round(newBid * 100.0) / 100.0;
                         System.out.println("[AUTO-BID] Placing bid: " + newBid + " (was " + highestBid + ")");
 
-                        // PLACE_BID
+                        // Καταχώρηση bid
                         Message bidMsg = new Message(MessageType.PLACE_BID);
                         bidMsg.setTokenId(tokenId);
                         bidMsg.setBidAmount(newBid);
@@ -144,6 +181,13 @@ public class PeerNode {
     }
 
 
+    /**
+     * Κύρια μέθοδος εκτέλεσης του peer. Συνδέεται με τον server, κάνει register/login, φορτώνει τα
+     * αντικείμενα του shared directory, και ξεκινά τους background threads.
+     * Στη συνέχεια αναμένει εντολές από τον χρήστη.
+     *
+     * @param args [username, password, port]
+     */
     public static void main(String[] args) {
         String username = args.length > 0 ? args[0] : "peer1";
         String password = args.length > 1 ? args[1] : "1234";
@@ -151,8 +195,8 @@ public class PeerNode {
 
         System.out.println("Starting peer with username=" + username + ", port=" + peerPort);
 
+        //αρχικοποίηση της κατάστασης του peer
         PeerState peerState = new PeerState(username, peerPort);
-
 
 
         try (
@@ -163,12 +207,13 @@ public class PeerNode {
         ) {
             System.out.println("Connected to Auction Server");
 
-            // ξεκινα local listener thread
+            // Εκκίνηση του PeerListener για εισερχόμενες συνδέσεις, όπως
+            // notifications από server, transaction requests από άλλους peers
             String sharedDir = "shared_directory_" + username;
             Thread listenerThread = new Thread(new PeerListener(peerPort, sharedDir, username, out));
             listenerThread.start();
 
-            // REGISTER
+            // εγγραφη στον server
             Message registerMsg = new Message(MessageType.REGISTER);
             registerMsg.setUsername(username);
             registerMsg.setPassword(password);
@@ -178,7 +223,7 @@ public class PeerNode {
             Message registerResponse = (Message) in.readObject();
             System.out.println("REGISTER -> " + registerResponse.getMessage());
 
-            // LOGIN
+            // συνδεση και λήψη token
             Message loginMsg = new Message(MessageType.LOGIN);
             loginMsg.setUsername(username);
             loginMsg.setPassword(password);
@@ -219,10 +264,12 @@ public class PeerNode {
             System.out.println("Type 'current' to get 'current' auction, 'details' for auction details\n" +
                     " , 'bid <amount> to bid in auction or  'logout' to terminate session.");
 
-            //εδώ καλούμε να ξεκινήσει το random generator , αφού καλέσαμε τη request action
+            //εδώ καλούμε να ξεκινήσει το random generator , αφού καλέσαμε τα request actions
             startItemGenerator(sharedDir, peerState.getTokenId(), SERVER_HOST, SERVER_PORT, username);
             startAutoBidder(peerState.getTokenId(), SERVER_HOST, SERVER_PORT);
 
+
+            // κύριος βρόχος αναμονής εντολών από τον χρήστη
             while (true) {
                 String input = scanner.nextLine();
                 String command = input.trim();

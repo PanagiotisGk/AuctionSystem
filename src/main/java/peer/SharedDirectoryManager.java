@@ -105,6 +105,7 @@ public class SharedDirectoryManager {
             }
         }
 
+        // ελεγχος ότι υπάρχουν όλα τα απαραίτητα πεδία
         if (objectId == null || description == null || startBid == null || auctionDuration == null) {
             throw new IllegalArgumentException("Missing required fields in file: " + file.getName());
         }

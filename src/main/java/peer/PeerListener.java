@@ -7,6 +7,14 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.file.Files;
 
+
+/**
+ * Η κλάση PeerListener τρέχει σε ξεχωριστό thread και ακούει για
+ * εισερχόμενες συνδέσεις στη θύρα του peer. Χειρίζεται δύο τύπους
+ * εισερχόμενων μηνυμάτων:
+ * 1. NOTIFICATION από τον server (AUCTION_WON, AUCTION_SOLD, PEER_DISCONNECTED κλπ.)
+ * 2. TRANSACTION_REQUEST από άλλον peer (winner που θέλει να αγοράσει αντικείμενο)
+ */
 public class PeerListener implements Runnable {
     private final int port;
     private final String sharedDirectoryPath;
@@ -27,6 +35,7 @@ public class PeerListener implements Runnable {
 
             while (true) {
                 Socket socket = serverSocket.accept();
+                //κάθε σύνδεση εξυπηρετείται σε ξεχωριστό thread
                 new Thread(() -> handleIncoming(socket)).start();
             }
 
@@ -38,6 +47,13 @@ public class PeerListener implements Runnable {
 
 
 
+    /**
+     * Χειρίζεται μια εισερχόμενη σύνδεση.
+     * Διαβάζει το μήνυμα και το προωθεί στον κατάλληλο handler
+     * ανάλογα με τον τύπο του.
+     *
+     * @param socket Το socket της εισερχόμενης σύνδεσης
+     */
     private void handleIncoming(Socket socket) {
         try (
                 ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
@@ -68,6 +84,15 @@ public class PeerListener implements Runnable {
         }
     }
 
+
+    /**
+     * Χειρίζεται το transaction ως αγοραστής (winner).
+     * Συνδέεται peer-to-peer με τον seller, στέλνει TRANSACTION_REQUEST,
+     * παραλαμβάνει το αρχείο metadata και το αποθηκεύει στο shared directory του, όπως ακρίβως αυτό αναγραφόταν στον πωλητή του
+     * Τέλος ενημερώνει τον server ότι έχει πλέον το αντικείμενο.
+     *
+     * @param notification Το notification AUCTION_WON με τα στοιχεία του seller
+     */
     private void handleWinnerTransaction(Message notification) {
         new Thread(() -> {
             System.out.println("Attempting to connect to seller...");
@@ -94,7 +119,8 @@ public class PeerListener implements Runnable {
                     Files.write(newFile.toPath(), response.getFileContent());
                     System.out.println("[TRANSACTION] File received and saved: " + response.getFileName());
 
-                    // Ενημερώνουμε τον server
+                    // Ενημέρωση server ότι ο αγοραστής έχει πλέον το αντικείμενο
+                    // synchronized για αποφυγή race condition με το κύριο thread
                     synchronized (serverOut) {
                         Message updateMsg = new Message(MessageType.ITEM_ACQUIRED);
                         updateMsg.setObjectId(notification.getObjectId());
@@ -112,6 +138,13 @@ public class PeerListener implements Runnable {
         }).start();
     }
 
+    /**
+     * Χειρίζεται το transaction ως πωλητής (seller). Αναζητά το αρχείο του αντικειμένου στο shared directory,
+     * το στέλνει στον αγοραστή και το διαγράφει τοπικά.
+     *
+     * @param request Το TRANSACTION_REQUEST με το object_id
+     * @param out     Η έξοδος προς τον αγοραστή
+     */
     private void handleTransactionRequest(Message request, ObjectOutputStream out) {
         try {
             String objectId = request.getObjectId();
@@ -149,7 +182,7 @@ public class PeerListener implements Runnable {
             out.writeObject(response);
             out.flush();
 
-            // Διαγράφουμε το αρχείο από το shared directory του seller
+            // διαγράφουμε το αρχείο από το shared directory του seller
             if (targetFile.delete()) {
                 System.out.println("[TRANSACTION] File sent and deleted: " + fileName);
             }

@@ -1,5 +1,9 @@
 package common;
 
+/**
+ * Οι τυποι των μηνυμάτων που εμφανίζονται είτε στον peer είτε
+ * στον server
+ */
 public enum MessageType {
     REGISTER,
     REGISTER_RESPONSE,

@@ -6,14 +6,16 @@ public class PeerState {
     private String tokenId;
     private boolean loggedIn;
 
+    /**
+     * Εδώ κρατάμε την κατάσταση του peer
+     *
+     * @param username
+     * @param peerPort
+     */
     public PeerState(String username, int peerPort) {
         this.username = username;
         this.peerPort = peerPort;
         this.loggedIn = false;
-    }
-
-    public String getUsername() {
-        return username;
     }
 
     public int getPeerPort() {
@@ -29,6 +31,7 @@ public class PeerState {
         this.loggedIn = (tokenId != null);
     }
 
+    //Για μελλοντική χρήση αν χρειαστει να ελεχθει ότι ένας peer έιναι συνδεδεμένος
     public synchronized boolean isLoggedIn() {
         return loggedIn;
     }

@@ -2,12 +2,24 @@ package model;
 
 import java.io.Serializable;
 
+/**
+ * Σε αυτή τη κλάση αρχικοποιούμε το πως θα έπρεπε να έιναι τα στοιχεία ενός αντικειμένου
+ * το οποίο διατίθεται προς δημοπρασία
+ */
 public class AuctionItem implements Serializable {
     private final String objectId;
     private final String description;
     private final double startBid;
     private final int auctionDuration;
 
+    /**
+     * Για τις πληροφορίες των αντικειμένων στο dir
+     *
+     * @param objectId
+     * @param description
+     * @param startBid
+     * @param auctionDuration
+     */
     public AuctionItem(String objectId, String description, double startBid, int auctionDuration) {
         this.objectId = objectId;
         this.description = description;

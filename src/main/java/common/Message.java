@@ -5,12 +5,18 @@ import java.io.Serializable;
 import model.AuctionItem;
 import java.util.List;
 
+/**
+ * Η κλάση Message αναπαριστά ένα μήνυμα που ανταλλάσσεται μεταξύ
+ * peers και server μέσω sockets. Υλοποιεί το Serializable interface
+ * ώστε να μπορεί να μεταδίδεται μέσω ObjectOutputStream/ObjectInputStream.
+ * Κάθε μήνυμα έχει έναν τύπο (MessageType) και τα κατάλληλα πεδία
+ * ανάλογα με τη λειτουργία που εκτελεί.
+ */
 public class Message implements Serializable {
     private MessageType type;
     private String username;
     private String password;
     private String tokenId;
-    private String ipAddress;
     private Integer port;
     private Boolean success;
     private String message;
@@ -57,10 +63,6 @@ public class Message implements Serializable {
         return type;
     }
 
-    public void setType(MessageType type) {
-        this.type = type;
-    }
-
     public String getUsername() {
         return username;
     }
@@ -83,14 +85,6 @@ public class Message implements Serializable {
 
     public void setTokenId(String tokenId) {
         this.tokenId = tokenId;
-    }
-
-    public String getIpAddress() {
-        return ipAddress;
-    }
-
-    public void setIpAddress(String ipAddress) {
-        this.ipAddress = ipAddress;
     }
 
     public Integer getPort() {

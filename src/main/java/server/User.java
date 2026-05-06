@@ -5,6 +5,8 @@ public class User {
     private final String password;
     private int numAuctionsSeller;
     private int numAuctionsBidder;
+    private double reputationScore;
+    private static final double BETA = 0.25;
 
     /**
      *
@@ -17,6 +19,7 @@ public class User {
         this.password = password;
         this.numAuctionsSeller = 0;
         this.numAuctionsBidder = 0;
+        this.reputationScore = 1.0;
     }
 
     public String getUsername() {
@@ -41,5 +44,22 @@ public class User {
 
     public void incrementNumAuctionsBidder() {
         this.numAuctionsBidder++;
+    }
+
+    public double getReputationScore() {
+        return reputationScore;
+    }
+
+    /**
+     * Ενημερώνει το reputation_score βάσει του τύπου:
+     * New reputation_score = (1 - β) * Old reputation_score + β * {0 ή 1}
+     * όπου β = 0.25
+     */
+    public void updateReputation(boolean success) {
+        double oldReputation = this.reputationScore;
+        this.reputationScore = (1 - BETA) * this.reputationScore + BETA * (success ? 1.0 : 0.0);
+        System.out.println("[REPUTATION] " + username + ": " + String.format("%.4f", oldReputation)
+                + " -> " + String.format("%.4f", this.reputationScore)
+                + (success ? " (επιτυχία)" : " (ακύρωση)"));
     }
 }

@@ -32,6 +32,9 @@ public class Message implements Serializable {
     private String fileName;
     private byte[] fileContent;
     private String sellerUsername;
+    private Double reputationScore;
+    private Long auctionDuration;
+    private String auctionId;
 
 
 
@@ -46,6 +49,12 @@ public class Message implements Serializable {
         return sellerTokenId;
     }
 
+    public Long getAuctionDuration() { return auctionDuration; }
+    public void setAuctionDuration(Long auctionDuration) { this.auctionDuration = auctionDuration; }
+
+    public String getAuctionId() { return auctionId; }
+    public void setAuctionId(String auctionId) { this.auctionId = auctionId; }
+
     public String getSellerUsername() { return sellerUsername; }
     public void setSellerUsername(String sellerUsername) { this.sellerUsername = sellerUsername; }
 
@@ -54,6 +63,9 @@ public class Message implements Serializable {
 
     public Integer getSellerPort() { return sellerPort; }
     public void setSellerPort(Integer sellerPort) { this.sellerPort = sellerPort; }
+
+    public Double getReputationScore() { return reputationScore; }
+    public void setReputationScore(Double reputationScore) { this.reputationScore = reputationScore; }
 
     public Message(MessageType type) {
         this.type = type;

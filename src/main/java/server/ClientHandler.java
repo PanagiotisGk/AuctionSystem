@@ -6,6 +6,7 @@ import common.MessageType;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
+import java.util.List;
 
 public class ClientHandler implements Runnable {
     private final Socket socket;
@@ -43,8 +44,12 @@ public class ClientHandler implements Runnable {
             }
 
         } catch (Exception exc) {
-            System.out.println("Client disconnected: " + socket.getInetAddress().getHostAddress());
-            serverState.handlePeerDisconnect(currentTokenId);
+            if (currentTokenId != null) {
+                System.out.println("[DISCONNECT] Peer disconnected (token: " + currentTokenId + ")");
+                serverState.handlePeerDisconnect(currentTokenId);
+            } else {
+                System.out.println("[INFO] Short-lived connection closed from " + socket.getInetAddress().getHostAddress());
+            }
         }
     }
 
@@ -84,12 +89,33 @@ public class ClientHandler implements Runnable {
             response.setMessage("Item acquisition recorded");
             return response;
         }
+
+        else if (request.getType() == MessageType.TRANSACTION_SUCCESS) {
+            String buyerUsername = request.getUsername();
+            System.out.println("[SERVER] Transaction SUCCESS for buyer: " + buyerUsername);
+            serverState.updateReputation(buyerUsername, true);
+            Message response = new Message(MessageType.TRANSACTION_SUCCESS);
+            response.setSuccess(true);
+            response.setMessage("Reputation updated (success)");
+            return response;
+        }
+        else if (request.getType() == MessageType.TRANSACTION_FAILED) {
+            String buyerUsername = request.getUsername();
+            System.out.println("[SERVER] Transaction FAILED (cancelled) by buyer: " + buyerUsername);
+            serverState.updateReputation(buyerUsername, false);
+            Message response = new Message(MessageType.TRANSACTION_FAILED);
+            response.setSuccess(true);
+            response.setMessage("Reputation updated (failure)");
+            return response;
+        }
         else {
             Message response = new Message(MessageType.ERROR);
             response.setSuccess(false);
             response.setMessage("Unknown request type");
             return response;
         }
+
+
     }
 
     /**
@@ -199,22 +225,34 @@ public class ClientHandler implements Runnable {
     private Message handleGetCurrentAuction(Message request) {
         Message response = new Message(MessageType.GET_CURRENT_AUCTION_RESPONSE);
 
-        AuctionState currentAuction = serverState.getCurrentAuction();
+        List<AuctionState> auctions = serverState.getCurrentAuctions();
 
-        if (currentAuction == null || !currentAuction.isActive()) {
+        if (auctions.isEmpty()) {
             response.setSuccess(false);
             response.setMessage("There is no active auction available");
             return response;
         }
 
+        // Στέλνουμε τις πληροφορίες ως formatted string
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < auctions.size(); i++) {
+            AuctionState a = auctions.get(i);
+            if (i > 0) sb.append(" | ");
+            sb.append("[").append(i + 1).append("] ")
+                    .append(a.getItem().getObjectId())
+                    .append(" - ").append(a.getItem().getDescription())
+                    .append(" (ID: ").append(a.getQueueEntry().getAuctionId()).append(")");
+        }
+
         response.setSuccess(true);
-        response.setMessage("Current auction fetched successfully");
-        response.setObjectId(currentAuction.getItem().getObjectId());
-        response.setDescription(currentAuction.getItem().getDescription());
+        response.setMessage(sb.toString());
+        // Για backward compatibility, βάζουμε τα στοιχεία της 1ης δημοπρασίας
+        response.setObjectId(auctions.get(0).getItem().getObjectId());
+        response.setDescription(auctions.get(0).getItem().getDescription());
+        response.setAuctionId(auctions.get(0).getQueueEntry().getAuctionId());
 
         return response;
     }
-
 
     /**
      * Εντολή details, επιστρέφει τις λεπτομέρειες της δημοπρασίας
@@ -225,9 +263,20 @@ public class ClientHandler implements Runnable {
     private Message handleGetAuctionDetails(Message request) {
         Message response = new Message(MessageType.GET_AUCTION_DETAILS_RESPONSE);
 
-        AuctionState currentAuction = serverState.getCurrentAuction();
+        String auctionId = request.getAuctionId();
+        AuctionState auction = null;
 
-        if (currentAuction == null || !currentAuction.isActive()) {
+        if (auctionId != null) {
+            auction = serverState.getAuctionById(auctionId);
+        } else {
+            // Fallback: πρώτη ενεργή δημοπρασία
+            List<AuctionState> auctions = serverState.getCurrentAuctions();
+            if (!auctions.isEmpty()) {
+                auction = auctions.get(0);
+            }
+        }
+
+        if (auction == null || !auction.isActive()) {
             response.setSuccess(false);
             response.setMessage("There is no active auction available");
             return response;
@@ -235,10 +284,12 @@ public class ClientHandler implements Runnable {
 
         response.setSuccess(true);
         response.setMessage("Auction details fetched successfully");
-        response.setSellerUsername(currentAuction.getQueueEntry().getSellerUsername());
-        response.setSellerTokenId(currentAuction.getQueueEntry().getSellerTokenId());
-        response.setCurrentHighestBid(currentAuction.getCurrentHighestBid());
-        response.setRemainingSeconds(currentAuction.getRemainingSeconds());
+        response.setAuctionId(auction.getQueueEntry().getAuctionId());
+        response.setSellerUsername(auction.getQueueEntry().getSellerUsername());
+        response.setSellerTokenId(auction.getQueueEntry().getSellerTokenId());
+        response.setCurrentHighestBid(auction.getCurrentHighestBid());
+        response.setRemainingSeconds(auction.getRemainingSeconds());
+        response.setAuctionDuration((long) auction.getItem().getAuctionDuration());
 
         return response;
     }
@@ -261,6 +312,7 @@ public class ClientHandler implements Runnable {
 
         ServerState.BidResult result = serverState.placeBid(
                 request.getTokenId(),
+                request.getAuctionId(),
                 request.getBidAmount()
         );
 

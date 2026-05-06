@@ -34,8 +34,8 @@ public class ServerState {
     // φτιαχνουμε ουρά first come first served
     private final ConcurrentLinkedQueue<AuctionQueueEntry> auctionQueue = new ConcurrentLinkedQueue<>();
 
-    //η τρέχουσα ενεργή δημοπρασία (την κανουμε volatile για να υπάρχει ορατότητα μεταξύ threads)
-    private volatile AuctionState currentAuction;
+    //2 slots δημοπρασιών, ώστε να τρέχουν δύο ταυτόχρονα
+    private final AuctionState[] currentAuctions = new AuctionState[2];
 
 
     /**
@@ -60,6 +60,7 @@ public class ServerState {
                 msg.setBidAmount(finalBid);
 
                 //αν είναι ο winner, στέλνουμε και τα στοιχεία του seller για να ξεκινήσουμε το transaction
+                //IP και PORT πωλητή
                 if ("AUCTION_WON".equals(eventType)) {
                     SessionInfo sellerSession = activeSessionsByToken.get(
                             auction.getQueueEntry().getSellerTokenId()
@@ -136,6 +137,24 @@ public class ServerState {
         return new LoginResult(true, tokenId, "SUCCESS");
     }
 
+    public static class BidResult {
+        private final boolean success;
+        private final String message;
+
+        public BidResult(boolean success, String message) {
+            this.success = success;
+            this.message = message;
+        }
+
+        public boolean isSuccess() {
+            return success;
+        }
+
+        public String getMessage() {
+            return message;
+        }
+    }
+
 
     /**
      * Ελέγχει αν η τρέχουσα δημοπρασία έχει λήξει και την οριστικοποιεί.
@@ -143,78 +162,66 @@ public class ServerState {
      * Ενημερώνει τον winner και τον seller για το αποτέλεσμα.
      */
     public synchronized void checkAndFinalizeExpiredAuction() {
-
-
-
-        try {
-            // Αν δεν υπάρχει ενεργή δημοπρασία, δεν κάνουμε τίποτα
-            if (currentAuction == null || !currentAuction.isActive()) {
-                return;
-            }
-
-            // Αν δεν έχει λήξει ο χρόνος, δεν κάνουμε τίποτα
-            if (currentAuction.getRemainingSeconds() > 0) {
-                return;
-            }
-
-            // Αποθηκεύουμε την τελευταία κατάσταση πριν το reset
-            AuctionState finishedAuction = currentAuction;
-            double finalBid = finishedAuction.getCurrentHighestBid();
-            String winnerToken = finishedAuction.getCurrentHighestBidderToken();
-
-
-            // Βρίσκουμε τις sessions του seller και winner
-            SessionInfo sellerSession = activeSessionsByToken.get(finishedAuction.getQueueEntry().getSellerTokenId());
-            SessionInfo winnerSession = (winnerToken != null)  ? activeSessionsByToken.get(winnerToken) : null; // null αν δεν υπάρχει winner
-
-            if (winnerToken == null) {
-                finishedAuction.setStatus(AuctionState.AuctionStatus.NO_BIDS);
-            } else {
-                finishedAuction.setStatus(AuctionState.AuctionStatus.SOLD);
-            }
-
-
-            System.out.println("AUCTION FINISHED:");
-            System.out.println("Item -> " + currentAuction.getItem().getObjectId());
-            System.out.println("Seller -> " + currentAuction.getQueueEntry().getSellerUsername());
-            System.out.println("Final Highest Bid -> " + currentAuction.getCurrentHighestBid());
-
-            if (winnerToken == null) {
-                // Δεν υπήρξε καμία προσφορά
-                finishedAuction.setStatus(AuctionState.AuctionStatus.NO_BIDS);
-                System.out.println("Result -> No bids were placed. No winner.");
-                if (sellerSession != null) notifyPeer(sellerSession, "AUCTION_NO_BIDS", currentAuction, finalBid);
-            } else {
-                // Βρέθηκε winner
-                String winnerUsername = (winnerSession != null) ? winnerSession.getUsername() : "UNKNOWN";
-                System.out.println("Result -> Winner found");
-                System.out.println("Winner Token -> " + winnerToken);
-                System.out.println("Winner Username -> " + winnerUsername);
-
-                //Αφού βρουμε winner και seller:
-                if (winnerSession != null) notifyPeer(winnerSession, "AUCTION_WON", currentAuction, finalBid);
-                if (sellerSession != null) notifyPeer(sellerSession, "AUCTION_SOLD", currentAuction, finalBid);
-
-                // Αυξάνουμε τους μετρητές δημοπρασιών
-                User sellerUser = registeredUsers.get(currentAuction.getQueueEntry().getSellerUsername());
-                if (sellerUser != null) {
-                    sellerUser.incrementNumAuctionsSeller();
+        for (int i = 0; i < currentAuctions.length; i++) {
+            try {
+                AuctionState auction = currentAuctions[i];
+                if (auction == null || !auction.isActive()) {
+                    continue;
                 }
 
-                if (winnerSession != null) {
+                if (auction.getRemainingSeconds() > 0) {
+                    continue;
+                }
 
-                    User winnerUser = registeredUsers.get(winnerSession.getUsername());
-                    if (winnerUser != null) {
-                        winnerUser.incrementNumAuctionsBidder();
+                double finalBid = auction.getCurrentHighestBid();
+                String winnerToken = auction.getCurrentHighestBidderToken();
+
+                SessionInfo sellerSession = activeSessionsByToken.get(auction.getQueueEntry().getSellerTokenId());
+                SessionInfo winnerSession = (winnerToken != null) ? activeSessionsByToken.get(winnerToken) : null;
+
+                if (winnerToken == null) {
+                    auction.setStatus(AuctionState.AuctionStatus.NO_BIDS);
+                } else {
+                    auction.setStatus(AuctionState.AuctionStatus.SOLD);
+                }
+
+                System.out.println("AUCTION FINISHED [Slot " + i + "]:");
+                System.out.println("Item -> " + auction.getItem().getObjectId());
+                System.out.println("Seller -> " + auction.getQueueEntry().getSellerUsername());
+                System.out.println("Final Highest Bid -> " + auction.getCurrentHighestBid());
+
+                if (winnerToken == null) {
+                    System.out.println("Result -> No bids were placed. No winner.");
+                    if (sellerSession != null) notifyPeer(sellerSession, "AUCTION_NO_BIDS", auction, finalBid);
+                } else {
+                    String winnerUsername = (winnerSession != null) ? winnerSession.getUsername() : "UNKNOWN";
+                    System.out.println("Result -> Winner found");
+                    System.out.println("Winner Username -> " + winnerUsername);
+
+                    if (winnerSession != null) notifyPeer(winnerSession, "AUCTION_WON", auction, finalBid);
+                    if (sellerSession != null) notifyPeer(sellerSession, "AUCTION_SOLD", auction, finalBid);
+
+                    User sellerUser = registeredUsers.get(auction.getQueueEntry().getSellerUsername());
+                    if (sellerUser != null) {
+                        sellerUser.incrementNumAuctionsSeller();
+                    }
+
+                    if (winnerSession != null) {
+                        User winnerUser = registeredUsers.get(winnerSession.getUsername());
+                        if (winnerUser != null) {
+                            winnerUser.incrementNumAuctionsBidder();
+                        }
                     }
                 }
+
+                currentAuctions[i] = null;
+
+            } catch (Exception e) {
+                System.out.println("ERROR inside checkAndFinalizeExpiredAuction [Slot " + i + "]:");
+                e.printStackTrace();
+                currentAuctions[i] = null;
             }
-        } catch (Exception e) {
-            System.out.println("ERROR inside checkAndFinalizeExpiredAuction:");
-            e.printStackTrace();
-            currentAuction = null; // reset για να μην ξαναμπεί
         }
-        //Ξεκινάει η επόμενη
         startNextAuctionIfNeeded();
     }
 
@@ -313,66 +320,105 @@ public class ServerState {
 
     /**
      * Ξεκινά την επόμενη δημοπρασία από την ουρά αν δεν τρέχει ήδη κάποια.
-     * Αν η ουρά είναι κενή, περιμένει την άφιξη νέου αντικειμένου.
+     * Αν η ουρά είναι κενή, περιμένει την άφιξη νέου αντικειμένου. Συγκρίνοντας ταυτόχρονα το reputation του seller και επιλέγει κατάλληλα από την
+     * ουρά αυτόν με το μεγαλύτερο reputation
      */
     public synchronized void startNextAuctionIfNeeded() {
-        if (currentAuction != null && currentAuction.isActive()) {
-            return;
+        for (int i = 0; i < currentAuctions.length; i++) {
+            // Αν αυτό το slot είναι κενό ή ανενεργό, βάλε νέα δημοπρασία
+            if (currentAuctions[i] != null && currentAuctions[i].isActive()) {
+                continue;
+            }
+
+            if (auctionQueue.isEmpty()) {
+                currentAuctions[i] = null;
+                continue;
+            }
+
+            // Σύγκριση reputation 1ου vs 2ου στην ουρά
+            AuctionQueueEntry firstEntry = auctionQueue.poll();
+            AuctionQueueEntry secondEntry = auctionQueue.peek();
+
+            AuctionQueueEntry selectedEntry;
+
+            if (secondEntry != null) {
+                double firstRep = getReputation(firstEntry.getSellerUsername());
+                double secondRep = getReputation(secondEntry.getSellerUsername());
+
+                if (firstRep < secondRep) {
+                    auctionQueue.poll();
+                    selectedEntry = secondEntry;
+                    ConcurrentLinkedQueue<AuctionQueueEntry> tempQueue = new ConcurrentLinkedQueue<>();
+                    tempQueue.add(firstEntry);
+                    tempQueue.addAll(auctionQueue);
+                    auctionQueue.clear();
+                    auctionQueue.addAll(tempQueue);
+
+                    System.out.println("[REPUTATION CHECK] Slot " + i + ": "
+                            + firstEntry.getSellerUsername() + " (rep=" + String.format("%.4f", firstRep)
+                            + ") < " + secondEntry.getSellerUsername()
+                            + " (rep=" + String.format("%.4f", secondRep) + ") -> Επιλέχθηκε το 2ο");
+                } else {
+                    selectedEntry = firstEntry;
+                }
+            } else {
+                selectedEntry = firstEntry;
+            }
+
+            currentAuctions[i] = new AuctionState(selectedEntry);
+
+            System.out.println("---NEW AUCTION STARTED [Slot " + i + "]---");
+            System.out.println("Auction ID -> " + currentAuctions[i].getQueueEntry().getAuctionId());
+            System.out.println("Item -> " + currentAuctions[i].getItem().getObjectId());
+            System.out.println("Description -> " + currentAuctions[i].getItem().getDescription());
+            System.out.println("Seller -> " + currentAuctions[i].getQueueEntry().getSellerUsername());
+            System.out.println("Start Bid -> " + currentAuctions[i].getCurrentHighestBid());
+            System.out.println("Duration -> " + currentAuctions[i].getItem().getAuctionDuration() + " sec");
         }
-
-        AuctionQueueEntry nextEntry = auctionQueue.poll();
-        if (nextEntry == null) {
-            currentAuction = null;
-            System.out.println("No auction available in queue.");
-            return;
-        }
-
-        // Δημιουργούμε νέα δημοπρασία
-        currentAuction = new AuctionState(nextEntry);
-
-        System.out.println("---NEW CURRENT AUCTION STARTED---");
-        System.out.println("Auction ID -> " + currentAuction.getQueueEntry().getAuctionId());
-        System.out.println("Item -> " + currentAuction.getItem().getObjectId());
-        System.out.println("Description -> " + currentAuction.getItem().getDescription());
-        System.out.println("Seller -> " + currentAuction.getQueueEntry().getSellerUsername());
-        System.out.println("Start Bid -> " + currentAuction.getCurrentHighestBid());
-        System.out.println("Duration -> " + currentAuction.getItem().getAuctionDuration() + " seconds");
     }
 
     /**
-     *Επιστρέφει την τρέχουσα ενεργή δημοπρασία
-     *
-     * @return
+     * Επιστρέφει τις ενεργές δημοπρασίες (0, 1 ή 2).
      */
-    public synchronized AuctionState getCurrentAuction() {
-        if (currentAuction == null) {
-            return null;
+    public synchronized List<AuctionState> getCurrentAuctions() {
+        List<AuctionState> active = new ArrayList<>();
+        for (AuctionState auction : currentAuctions) {
+            if (auction != null && auction.isActive()) {
+                active.add(auction);
+            }
         }
-
-        if (!currentAuction.isActive()) {
-            return null;
-        }
-
-        return currentAuction;
+        return active;
     }
 
-    // Υπεύθυνη για τα αποτελέσματα μιας προσφοράς
-    public static class BidResult {
-        private final boolean success;
-        private final String message;
-
-        public BidResult(boolean success, String message) {
-            this.success = success;
-            this.message = message;
+    /**
+     * Βρίσκει μια ενεργή δημοπρασία βάσει auctionId.
+     */
+    public synchronized AuctionState getAuctionById(String auctionId) {
+        for (AuctionState auction : currentAuctions) {
+            if (auction != null && auction.isActive()
+                    && auction.getQueueEntry().getAuctionId().equals(auctionId)) {
+                return auction;
+            }
         }
+        return null;
+    }
 
-        public boolean isSuccess() {
-            return success;
+    /**
+     * Ενημερώνει το reputation_score ενός peer μετά από transaction.
+     */
+    public synchronized void updateReputation(String username, boolean success) {
+        User user = registeredUsers.get(username);
+        if (user != null) {
+            user.updateReputation(success);
         }
+    }
 
-        public String getMessage() {
-            return message;
-        }
+    /**
+     * Επιστρέφει το reputation_score ενός peer βάσει username.
+     */
+    public double getReputation(String username) {
+        User user = registeredUsers.get(username);
+        return (user != null) ? user.getReputationScore() : -1.0;
     }
 
 
@@ -420,15 +466,17 @@ public class ServerState {
         });
 
         //ακυρώνουμε την τρέχουσα δημοπρασία αν ο seller είναι αυτός που έπεσε
-        if (currentAuction != null && currentAuction.isActive()) {
-            String sellerTokenId = currentAuction.getQueueEntry().getSellerTokenId();
-            if (sellerTokenId.equals(tokenId)) {
-                System.out.println("[INFO] Removing active auction item: "
-                        + currentAuction.getItem().getObjectId());
-                System.out.println("Seller disconnected, maybe he didn't find a warm crowd... Cancelling auction: "
-                        + currentAuction.getItem().getDescription());
-                currentAuction.setStatus(AuctionState.AuctionStatus.CANCELLED);
-                currentAuction = null;
+        for (int i = 0; i < currentAuctions.length; i++) {
+            if (currentAuctions[i] != null && currentAuctions[i].isActive()) {
+                String sellerTokenId = currentAuctions[i].getQueueEntry().getSellerTokenId();
+                if (sellerTokenId.equals(tokenId)) {
+                    System.out.println("[INFO] Removing active auction [Slot " + i + "]: "
+                            + currentAuctions[i].getItem().getObjectId());
+                    System.out.println("Seller disconnected. Cancelling auction: "
+                            + currentAuctions[i].getItem().getDescription());
+                    currentAuctions[i].setStatus(AuctionState.AuctionStatus.CANCELLED);
+                    currentAuctions[i] = null;
+                }
             }
         }
 
@@ -451,21 +499,20 @@ public class ServerState {
      * @param bidAmount
      * @return
      */
-    public synchronized BidResult placeBid(String bidderTokenId, double bidAmount) {
+    public synchronized BidResult placeBid(String bidderTokenId, String auctionId, double bidAmount) {
         SessionInfo bidderSession = activeSessionsByToken.get(bidderTokenId);
 
         if (bidderSession == null) {
             return new BidResult(false, "Invalid token");
         }
 
-        AuctionState auction = getCurrentAuction();
+        AuctionState auction = getAuctionById(auctionId);
 
-        if (auction == null) { //το getCurrentAuction θα μου επιστρέψει ούτως ή αλλως κενό
-            return new BidResult(false, "No active auction");
+        if (auction == null) {
+            return new BidResult(false, "No active auction with this ID");
         }
 
         if (auction.getRemainingSeconds() <= 0) {
-            checkAndFinalizeExpiredAuction();
             return new BidResult(false, "Sorry, auction has already ended");
         }
 
@@ -484,9 +531,9 @@ public class ServerState {
         }
 
         System.out.println("NEW BID ACCEPTED:");
+        System.out.println("Auction -> " + auctionId);
         System.out.println("Item -> " + auction.getItem().getObjectId());
-        System.out.println("Bidder Token -> " + bidderTokenId);
-        System.out.println("Bidder Id -> " + bidderSession.getUsername());
+        System.out.println("Bidder -> " + bidderSession.getUsername());
         System.out.println("New Highest Bid -> " + auction.getCurrentHighestBid());
 
         return new BidResult(true, "Bid placed successfully");

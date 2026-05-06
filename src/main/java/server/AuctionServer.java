@@ -23,7 +23,7 @@ public class AuctionServer {
 
             while (true) {   // για να βρουμε νέα συνδεση απο peer
                 Socket clientSocket = serverSocket.accept();
-                System.out.println("New peer connected from " + clientSocket.getInetAddress().getHostAddress());
+                System.out.println("New connection from " + clientSocket.getInetAddress().getHostAddress());
 
                 ClientHandler handler = new ClientHandler(clientSocket, serverState);
                 Thread thread = new Thread(handler);

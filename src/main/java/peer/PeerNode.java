@@ -55,8 +55,8 @@ public class PeerNode {
                     Thread.sleep(waitSeconds * 1000);
 
                     // Δημιουργία νέου αντικειμένου με τυχαία στοιχεία, συμφωνεί στο πρότυπο
-                    String objectId = "Object_" + String.format("%02d", itemCounter++);
-                    String description = "Auto-generated item " + objectId;
+                    String objectId = username + "_Object_" + String.format("%02d", itemCounter++);
+                    String description = "Auto-generated item " + objectId + " by " + username;
                     double startBid = 10 + rand.nextInt(190); // τυχαία τιμή 10-200
                     int duration = 30 + rand.nextInt(60); // τυχαία διάρκεια 30-90 sec
 
@@ -133,6 +133,7 @@ public class PeerNode {
                         }
 
                         System.out.println("[AUTO-BID] Current auction: " + currentResponse.getObjectId());
+                        String auctionId = currentResponse.getAuctionId();
 
                         // Coin flip: 60% πιθανότητα ενδιαφέροντος
                         if (rand.nextDouble() > 0.6) {
@@ -143,6 +144,7 @@ public class PeerNode {
                         // παίρνουμε λεπτομέρειες
                         Message detailsMsg = new Message(MessageType.GET_AUCTION_DETAILS);
                         detailsMsg.setTokenId(tokenId);
+                        detailsMsg.setAuctionId(auctionId);
                         out.writeObject(detailsMsg);
                         out.flush();
                         Message detailsResponse = (Message) in.readObject();
@@ -158,8 +160,21 @@ public class PeerNode {
                             continue;
                         }
 
-                        // υπολογισμός νέας προσφοράς: NewBid = HighestBid * (1 + RAND/10)
-                        double newBid = highestBid * (1 + rand.nextDouble() / 10);
+                        // Υπολογισμός νέας προσφοράς
+                        // Αν απομένει ≤10% της διάρκειας -> αύξηση έως 20%, αλλιώς έως 10%
+                        Long remaining = detailsResponse.getRemainingSeconds();
+                        Long duration = detailsResponse.getAuctionDuration();
+
+                        double maxIncrease;
+                        if (remaining != null && duration != null && duration > 0
+                                && remaining <= duration * 0.10) {
+                            maxIncrease = 0.20;
+                            System.out.println("[AUTO-BID] Last 10% of auction! Bidding aggressively (up to 20%).");
+                        } else {
+                            maxIncrease = 0.10;
+                        }
+
+                        double newBid = highestBid * (1 + rand.nextDouble() * maxIncrease);
                         newBid = Math.round(newBid * 100.0) / 100.0;
                         System.out.println("[AUTO-BID] Placing bid: " + newBid + " (was " + highestBid + ")");
 
@@ -167,6 +182,7 @@ public class PeerNode {
                         Message bidMsg = new Message(MessageType.PLACE_BID);
                         bidMsg.setTokenId(tokenId);
                         bidMsg.setBidAmount(newBid);
+                        bidMsg.setAuctionId(auctionId);
                         out.writeObject(bidMsg);
                         out.flush();
                         Message bidResponse = (Message) in.readObject();
@@ -261,8 +277,8 @@ public class PeerNode {
             Message requestAuctionResponse = (Message) in.readObject();
             System.out.println("REQUEST_AUCTION -> " + requestAuctionResponse.getMessage());
             System.out.println("Peer is now active.");
-            System.out.println("Type 'current' to get 'current' auction, 'details' for auction details\n" +
-                    " , 'bid <amount> to bid in auction or  'logout' to terminate session.");
+            System.out.println("Type 'current' to see active auctions, 'details' for auction details\n" +
+                    " , 'bid <auctionId> <amount>' to bid or 'logout' to terminate session.");
 
             //εδώ καλούμε να ξεκινήσει το random generator , αφού καλέσαμε τα request actions
             startItemGenerator(sharedDir, peerState.getTokenId(), SERVER_HOST, SERVER_PORT, username);
@@ -309,7 +325,7 @@ public class PeerNode {
                 } else if ("details".equalsIgnoreCase(command)) {
                     Message detailsMsg = new Message(MessageType.GET_AUCTION_DETAILS);
                     detailsMsg.setTokenId(peerState.getTokenId());
-
+                    detailsMsg.setAuctionId(currentAuctionResponse.getAuctionId());
                     out.writeObject(detailsMsg);
                     out.flush();
 
@@ -326,18 +342,20 @@ public class PeerNode {
                     }
 
                 } else if (command.toLowerCase().startsWith("bid ")) {
-                    String[] parts = command.split("\\s+", 2);
+                    String[] parts = command.split("\\s+", 3);
 
-                    if (parts.length != 2) {
-                        System.out.println("Usage: bid <amount>");
+                    if (parts.length != 3) {
+                        System.out.println("Usage: bid <auctionId> <amount>");
                         continue;
                     }
 
                     try {
-                        double bidAmount = Double.parseDouble(parts[1]);
+                        String bidAuctionId = parts[1];
+                        double bidAmount = Double.parseDouble(parts[2]);
 
                         Message bidMsg = new Message(MessageType.PLACE_BID);
                         bidMsg.setTokenId(peerState.getTokenId());
+                        bidMsg.setAuctionId(bidAuctionId);
                         bidMsg.setBidAmount(bidAmount);
 
                         out.writeObject(bidMsg);
@@ -353,7 +371,7 @@ public class PeerNode {
 
 
                 } else {
-                    System.out.println("Unknown command. Eligible commands are: 'current', 'details', 'bid <amount>' or 'logout'.");
+                    System.out.println("Unknown command. Eligible commands are: 'current', 'details', 'bid <auctionId> <amount>' or 'logout'.");
                 }
             }
 

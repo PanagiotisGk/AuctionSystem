@@ -68,7 +68,7 @@ public class ClientHandler implements Runnable {
         } else if (request.getType() == MessageType.LOGOUT) {
             return handleLogout(request);
         }else if (request.getType() == MessageType.REQUEST_AUCTION) {
-        return handleRequestAuction(request);
+            return handleRequestAuction(request);
 
         } else if (request.getType() == MessageType.GET_CURRENT_AUCTION) {
             return handleGetCurrentAuction(request);
@@ -94,6 +94,10 @@ public class ClientHandler implements Runnable {
             String buyerUsername = request.getUsername();
             System.out.println("[SERVER] Transaction SUCCESS for buyer: " + buyerUsername);
             serverState.updateReputation(buyerUsername, true);
+            // Αφαιρούμε από τα pending — ολοκληρώθηκε επιτυχώς
+            if (request.getAuctionId() != null) {
+                serverState.removePendingTransaction(request.getAuctionId());
+            }
             Message response = new Message(MessageType.TRANSACTION_SUCCESS);
             response.setSuccess(true);
             response.setMessage("Reputation updated (success)");
@@ -103,9 +107,11 @@ public class ClientHandler implements Runnable {
             String buyerUsername = request.getUsername();
             System.out.println("[SERVER] Transaction FAILED (cancelled) by buyer: " + buyerUsername);
             serverState.updateReputation(buyerUsername, false);
+            // Δοκιμάζουμε τον επόμενο bidder
+            serverState.handleTransactionCancelled(buyerUsername);
             Message response = new Message(MessageType.TRANSACTION_FAILED);
             response.setSuccess(true);
-            response.setMessage("Reputation updated (failure)");
+            response.setMessage("Reputation updated (failure). Trying next bidder...");
             return response;
         }
         else {

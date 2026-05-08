@@ -1,6 +1,8 @@
 package server;
 
 import model.AuctionItem;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Η κλάση AuctionState αναπαριστά την κατάσταση μιας δημοπρασίας.
@@ -25,11 +27,35 @@ public class AuctionState {
         this.status = AuctionStatus.ACTIVE;
     }
 
+
+    /**
+     * Ιστορικό προσφορών — κρατάμε όλους τους bidders ταξινομημένους
+     * κατά ποσό (φθίνουσα), ώστε αν ο winner ακυρώσει, ο server
+     * μπορεί να κατοχυρώσει στον επόμενο.
+     */
+    private final List<BidEntry> bidHistory = new ArrayList<>();
+
+    /**
+     * Εσωτερική κλάση που αναπαριστά μια προσφορά στο ιστορικό.
+     */
+    public static class BidEntry {
+        private final String bidderToken;
+        private final double amount;
+
+        public BidEntry(String bidderToken, double amount) {
+            this.bidderToken = bidderToken;
+            this.amount = amount;
+        }
+
+        public String getBidderToken() { return bidderToken; }
+        public double getAmount() { return amount; }
+    }
+
     /**
      * Enum με τις δυνατές καταστάσεις μιας δημοπρασίας:
-     * ACTIVE    - Σε εξέλιξη
-     * SOLD      - Ολοκληρώθηκε με winner
-     * NO_BIDS   - Ολοκληρώθηκε χωρίς προσφορές
+     * ACTIVE - Σε εξέλιξη
+     * SOLD - Ολοκληρώθηκε με winner
+     * NO_BIDS - Ολοκληρώθηκε χωρίς προσφορές
      * CANCELLED - Ακυρώθηκε λόγω αποσύνδεσης seller
      */
     public enum AuctionStatus {
@@ -104,6 +130,7 @@ public class AuctionState {
     /**
      * Καταχωρεί μια νέα προσφορά αν η δημοπρασία είναι ενεργή
      * και η νέα προσφορά είναι μεγαλύτερη από την τρέχουσα.
+     * Αποθηκεύει κάθε επιτυχή προσφορά στο ιστορικό.
      *
      * @param bidderTokenId το token του peer που κάνει την προσφορά
      * @param newBidAmount το ποσό της νέας προσφοράς
@@ -120,6 +147,20 @@ public class AuctionState {
 
         currentHighestBid = newBidAmount;
         currentHighestBidderToken = bidderTokenId;
+
+        // Αποθηκεύουμε στο ιστορικό (πάντα στην αρχή, ώστε να είναι φθίνουσα)
+        bidHistory.add(0, new BidEntry(bidderTokenId, newBidAmount));
+
         return true;
+    }
+
+    /**
+     * Επιστρέφει αντίγραφο του ιστορικού προσφορών (φθίνουσα σειρά ποσού).
+     * Ο πρώτος στη λίστα είναι ο highest bidder.
+     *
+     * @return Λίστα με όλες τις προσφορές
+     */
+    public synchronized List<BidEntry> getBidHistory() {
+        return new ArrayList<>(bidHistory);
     }
 }

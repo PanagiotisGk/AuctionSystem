@@ -5,6 +5,7 @@ public class PeerState {
     private final int peerPort;
     private String tokenId;
     private boolean loggedIn;
+    private String lastAuctionId;
 
     /**
      * Εδώ κρατάμε την κατάσταση του peer
@@ -40,4 +41,8 @@ public class PeerState {
         this.tokenId = null;
         this.loggedIn = false;
     }
+
+    public String getLastAuctionId() { return lastAuctionId; }
+    public void setLastAuctionId(String lastAuctionId) { this.lastAuctionId = lastAuctionId; }
+
 }

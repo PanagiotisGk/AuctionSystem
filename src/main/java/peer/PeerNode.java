@@ -277,7 +277,7 @@ public class PeerNode {
             Message requestAuctionResponse = (Message) in.readObject();
             System.out.println("REQUEST_AUCTION -> " + requestAuctionResponse.getMessage());
             System.out.println("Peer is now active.");
-            System.out.println("Type 'current' to see active auctions, 'details' for auction details\n" +
+            System.out.println("Type 'current' to see active auctions, 'details <auctionId>' for auction details\n" +
                     " , 'bid <auctionId> <amount>' to bid or 'logout' to terminate session.");
 
             //εδώ καλούμε να ξεκινήσει το random generator , αφού καλέσαμε τα request actions
@@ -315,17 +315,32 @@ public class PeerNode {
                     Message currentAuctionResponse = (Message) in.readObject();
 
                     if (Boolean.TRUE.equals(currentAuctionResponse.getSuccess())) {
-                        System.out.println("CURRENT AUCTION:");
-                        System.out.println("Object ID -> " + currentAuctionResponse.getObjectId());
-                        System.out.println("Description -> " + currentAuctionResponse.getDescription());
+                        System.out.println("ACTIVE AUCTIONS:");
+                        System.out.println(currentAuctionResponse.getMessage());
+                        System.out.println("(Use 'details <auctionId>' for more info, or 'bid <auctionId> <amount>' to bid)");
+                        peerState.setLastAuctionId(currentAuctionResponse.getAuctionId());
                     } else {
                         System.out.println("GET_CURRENT_AUCTION -> " + currentAuctionResponse.getMessage());
                     }
 
-                } else if ("details".equalsIgnoreCase(command)) {
+                } else if (command.toLowerCase().startsWith("details")) {
+                    String[] parts = command.split("\\s+", 2);
+                    String detailsAuctionId;
+
+                    if (parts.length == 2) {
+                        detailsAuctionId = parts[1];
+                    } else {
+                        detailsAuctionId = peerState.getLastAuctionId();
+                    }
+
+                    if (detailsAuctionId == null) {
+                        System.out.println("Usage: details <auctionId> (or type 'current' first)");
+                        continue;
+                    }
+
                     Message detailsMsg = new Message(MessageType.GET_AUCTION_DETAILS);
                     detailsMsg.setTokenId(peerState.getTokenId());
-                    detailsMsg.setAuctionId(currentAuctionResponse.getAuctionId());
+                    detailsMsg.setAuctionId(detailsAuctionId);
                     out.writeObject(detailsMsg);
                     out.flush();
 
@@ -333,7 +348,7 @@ public class PeerNode {
 
                     if (Boolean.TRUE.equals(detailsResponse.getSuccess())) {
                         System.out.println("AUCTION DETAILS:");
-                        System.out.println("Seller Token -> " + detailsResponse.getSellerTokenId());
+                        System.out.println("Auction ID -> " + detailsResponse.getAuctionId());
                         System.out.println("Seller Username -> " + detailsResponse.getSellerUsername());
                         System.out.println("Current Highest Bid -> " + detailsResponse.getCurrentHighestBid());
                         System.out.println("Remaining Seconds -> " + detailsResponse.getRemainingSeconds());

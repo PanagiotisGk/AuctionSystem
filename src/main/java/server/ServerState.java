@@ -37,6 +37,10 @@ public class ServerState {
     //2 slots δημοπρασιών, ώστε να τρέχουν δύο ταυτόχρονα
     private final AuctionState[] currentAuctions = new AuctionState[2];
 
+    private final ConcurrentHashMap<String, java.util.Set<String>> cancelledBidders = new ConcurrentHashMap<>();
+
+    private final ConcurrentHashMap<String, AuctionState> pendingTransactions = new ConcurrentHashMap<>();
+
 
     /**
      * Στέλνει notification σε έναν συγκεκριμένο peer μέσω socket.
@@ -200,6 +204,10 @@ public class ServerState {
 
                     if (winnerSession != null) notifyPeer(winnerSession, "AUCTION_WON", auction, finalBid);
                     if (sellerSession != null) notifyPeer(sellerSession, "AUCTION_SOLD", auction, finalBid);
+
+                    // Κρατάμε τη δημοπρασία ως pending μέχρι να ολοκληρωθεί το transaction
+                    // ώστε αν ο winner ακυρώσει, να πέσει στον επόμενο bidder
+                    addPendingTransaction(auction.getQueueEntry().getAuctionId(), auction);
 
                     User sellerUser = registeredUsers.get(auction.getQueueEntry().getSellerUsername());
                     if (sellerUser != null) {
@@ -411,6 +419,105 @@ public class ServerState {
         if (user != null) {
             user.updateReputation(success);
         }
+    }
+
+    /**
+     * Κρατάμε τους bidders που έχουν ακυρώσει ανά δημοπρασία,
+     * ώστε να μην τους ξαναδοκιμάζουμε.
+     */
+
+
+    /**
+     * Χειρίζεται την ακύρωση transaction από τον buyer.
+     * Ψάχνει τον επόμενο bidder στο ιστορικό (που δεν έχει ήδη ακυρώσει)
+     * και του στέλνει AUCTION_WON.
+     */
+    public synchronized void handleTransactionCancelled(String buyerUsername) {
+        String buyerToken = usernameToToken.get(buyerUsername);
+        AuctionState auction = null;
+        String auctionId = null;
+
+        for (var entry : pendingTransactions.entrySet()) {
+            AuctionState a = entry.getValue();
+            List<AuctionState.BidEntry> history = a.getBidHistory();
+            for (AuctionState.BidEntry bid : history) {
+                if (bid.getBidderToken().equals(buyerToken)) {
+                    auction = a;
+                    auctionId = entry.getKey();
+                    break;
+                }
+            }
+            if (auction != null) break;
+        }
+
+        if (auction == null) {
+            System.out.println("[FALLBACK] No pending auction found for buyer: " + buyerUsername);
+            return;
+        }
+
+        // Προσθέτουμε τον buyer στους ακυρωμένους
+        cancelledBidders.computeIfAbsent(auctionId, k -> ConcurrentHashMap.newKeySet()).add(buyerToken);
+        java.util.Set<String> cancelled = cancelledBidders.get(auctionId);
+
+        // Ψάχνουμε τον επόμενο bidder που ΔΕΝ έχει ακυρώσει
+        List<AuctionState.BidEntry> history = auction.getBidHistory();
+        boolean foundNext = false;
+
+        for (AuctionState.BidEntry bid : history) {
+            // Παράλειψη όσων έχουν ήδη ακυρώσει
+            if (cancelled.contains(bid.getBidderToken())) {
+                continue;
+            }
+
+            SessionInfo nextBidderSession = activeSessionsByToken.get(bid.getBidderToken());
+            if (nextBidderSession != null) {
+                System.out.println("[FALLBACK] Trying next bidder: " + nextBidderSession.getUsername()
+                        + " with bid: " + bid.getAmount());
+
+                auction.setCurrentHighestBidderToken(bid.getBidderToken());
+                auction.setCurrentHighestBid(bid.getAmount());
+
+                notifyPeer(nextBidderSession, "AUCTION_WON", auction, bid.getAmount());
+                foundNext = true;
+                break;
+            } else {
+                System.out.println("[FALLBACK] Bidder " + bid.getBidderToken() + " is offline, skipping.");
+            }
+        }
+
+        if (!foundNext) {
+            System.out.println("[FALLBACK] No more bidders available. Item unsold: "
+                    + auction.getItem().getObjectId());
+            pendingTransactions.remove(auctionId);
+            cancelledBidders.remove(auctionId);
+
+            SessionInfo sellerSession = activeSessionsByToken.get(
+                    auction.getQueueEntry().getSellerTokenId()
+            );
+            if (sellerSession != null) {
+                notifyPeer(sellerSession, "AUCTION_NO_BIDS", auction, 0);
+            }
+        }
+    }
+
+    /**
+     * Καταχωρεί μια δημοπρασία ως pending transaction (αναμονή για αποτέλεσμα).
+     *
+     * @param auctionId Το ID της δημοπρασίας
+     * @param auction Η κατάσταση δημοπρασίας
+     */
+    public void addPendingTransaction(String auctionId, AuctionState auction) {
+        pendingTransactions.put(auctionId, auction);
+    }
+
+    /**
+     * Αφαιρεί μια δημοπρασία από τα pending transactions (ολοκληρώθηκε επιτυχώς).
+     *
+     * @param auctionId Το ID της δημοπρασίας
+     */
+    public void removePendingTransaction(String auctionId) {
+        pendingTransactions.remove(auctionId);
+        cancelledBidders.remove(auctionId);
     }
 
     /**
